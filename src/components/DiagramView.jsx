@@ -30,7 +30,8 @@ const nodeStyles = `
     border-radius: 5px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
     font-size: 12px;
-    max-width: 220px;
+    width: 180px; // Ancho fijo
+    height: 100px; // Altura fija
     overflow: visible !important;
   }
   
@@ -159,18 +160,28 @@ const TruncatedText = ({ text, maxLength = 15 }) => {
 
   return (
     <>
-      <div className="flex items-center overflow-visible" ref={textRef}>
+      <div className="flex  overflow-visible" ref={textRef}>
         <span className="text-green-400 truncate max-w-[80%]">{text.substring(0, maxLength)}…</span>
         <button 
           onClick={(e) => {
             e.stopPropagation();
             setIsExpanded(!isExpanded);
           }}
-          className="ml-1 text-xs text-gray-400 hover:text-white flex-shrink-0 z-10"
+          className="ml-1 text-xs text-gray-400 hover:text-white flex-shrink-0 z-10 flex items-center justify-center w-5 h-5 !p-0" // Aumentar el tamaño del botón
           title="Ver texto completo"
           tabIndex={0}
+          aria-label="Toggle text expansion"
         >
-          {isExpanded ? "×" : "..."}
+          {isExpanded ? (
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"> // Aumentar el tamaño del icono
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"> // Aumentar el tamaño del icono
+              <path d="M6 12h12"></path>
+            </svg>
+          )}
         </button>
       </div>
 
@@ -243,7 +254,7 @@ const ObjectNode = ({ data, id }) => {
         <div className="border-t border-gray-700 pt-1 node-content">
           {data.properties.map((prop, index) => (
             <div key={prop.key} className="flex text-xs py-1 border-b border-gray-700 last:border-b-0 overflow-visible">
-              <span className="text-blue-400 min-w-[40%] pr-2 flex-shrink-0 truncate">{prop.key}:</span>
+              <span className="text-blue-400 min-w-[40%] pr-2 flex-shrink-0 truncate ###">{prop.key}:</span>
               <div className="flex-grow min-w-0 overflow-visible">
                 <TruncatedText text={prop.value} maxLength={12} />
               </div>
@@ -393,55 +404,12 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
   
   // Función auxiliar para estimar el tamaño de un nodo basado en su contenido
   const estimateNodeSize = useCallback((node) => {
-    let width = 160; // Ancho base más reducido
-    let height = 40; // Altura base más reducida
-    
-    // Ajuste según el modo de tamaño seleccionado
-    const sizeMultiplier = nodeSizeMode === 'compact' ? 0.8 : 
-                          nodeSizeMode === 'expanded' ? 1.1 : 1;
-    
-    width *= sizeMultiplier;
-    height *= sizeMultiplier;
-    
-    // Calcular tamaño basado en el contenido
-    if (node.data) {
-      // Si es un nodo de objeto y tiene propiedades, ajustar altura
-      if (node.type === 'objectNode' && node.data.properties) {
-        const visibleProps = node.data.collapsed ? 0 : node.data.properties.length;
-        // Altura base + altura por cada propiedad visible (reducida)
-        height += visibleProps * 16 * sizeMultiplier; // Antes 18px
-        
-        // Limitar el número de propiedades que afectan la altura (para nodos muy grandes)
-        const maxPropsForHeight = 8;
-        if (visibleProps > maxPropsForHeight) {
-          height = height - ((visibleProps - maxPropsForHeight) * 8 * sizeMultiplier);
-        }
-        
-        // Ya no calculamos el ancho basado en propiedades largas
-        // porque ahora truncamos y usamos un popup
-      }
-      
-      // Si es un nodo de array, ajustar según si está colapsado
-      if (node.type === 'arrayNode') {
-        if (!node.data.collapsed && node.data.length > 0) {
-          // Si está expandido, dar más espacio (reducido)
-          height += 12 * sizeMultiplier; // Antes 15px
-        }
-        
-        // Si el array tiene un nombre largo, truncarlo en lugar de hacer el nodo más grande
-      }
-    }
-    
-    // Asegurar mínimos razonables (reducidos)
-    width = Math.max(width, 130 * sizeMultiplier); // Antes 150
-    height = Math.max(height, 30 * sizeMultiplier); // Antes 35
-    
-    // Establecer máximos más estrictos
-    width = Math.min(width, 180 * sizeMultiplier); // Antes 220
-    height = Math.min(height, 180 * sizeMultiplier); // Antes 200
+    // Establecer un tamaño fijo para todos los nodos
+    const width = 180; // Ancho fijo
+    const height = 100; // Altura fija
 
     return { width, height };
-  }, [nodeSizeMode]);
+  }, []);
   
   // Función de layout mejorada con espaciado más compacto
   const getLayoutedElements = useCallback((nodes, edges, direction = 'LR') => {
