@@ -185,6 +185,8 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   
+  const [isMenuOpen, setIsMenuOpen] = useState(false); // Estado para el menú hamburguesa
+  
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -951,7 +953,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     return { nodes: nodesWithCollapseHandler, edges };
   }, []); // Dependencia vacía ya que handleNodeCollapse no está definido aún
 
-  // Añadir la función handleNodeCollapse que se usa en createNodes
+  // Mejorar la función handleNodeCollapse para gestionar mejor las aristas
   const handleNodeCollapse = useCallback((nodeId) => {
     setNodes(prevNodes => {
       // Obtener el estado de colapso actual del nodo
@@ -1032,43 +1034,78 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         return node;
       });
       
-      // También necesitamos actualizar aristas
+      // También necesitamos actualizar aristas (mejorado)
       const currentEdges = edgesRef.current;
+      
+      // Crear un registro de todas las aristas que se deben mostrar/ocultar
+      const edgeVisibilityMap = {};
+      
+      // Primero, registrar todas las aristas que involucran a los descendientes
+      currentEdges.forEach(edge => {
+        const sourceIsDescendant = allDescendants.includes(edge.source);
+        const targetIsDescendant = allDescendants.includes(edge.target);
+        const sourceIsCollapsedNode = edge.source === nodeId;
+        
+        // Si la arista conecta el nodo colapsado con un descendiente directo,
+        // o conecta dos descendientes, debe ocultarse cuando se colapsa
+        if ((sourceIsCollapsedNode && targetIsDescendant) || 
+            (sourceIsDescendant && targetIsDescendant)) {
+          edgeVisibilityMap[edge.id] = newCollapsedState ? 'hide' : 'show';
+        }
+        
+        // Si la arista tiene origen o destino en un descendiente pero el otro extremo
+        // no es el nodo colapsado ni otro descendiente, también debe ocultarse
+        if ((sourceIsDescendant && !targetIsDescendant && !edge.target === nodeId) ||
+            (targetIsDescendant && !sourceIsDescendant && !edge.source === nodeId)) {
+          edgeVisibilityMap[edge.id] = newCollapsedState ? 'hide' : 'show';
+        }
+      });
+      
+      // Aplicar cambios a las aristas
       setEdges(prevEdges => 
         prevEdges.map(edge => {
-          const sourceHidden = allDescendants.includes(edge.source);
-          const targetHidden = allDescendants.includes(edge.target);
-          const shouldHide = sourceHidden || targetHidden || 
-                           (edge.source === nodeId && newCollapsedState);
+          const action = edgeVisibilityMap[edge.id];
           
-          if (shouldHide) {
-          return {
+          if (action === 'hide') {
+            return {
               ...edge,
               hidden: true,
-            style: {
+              style: {
                 ...edge.style,
                 opacity: 0,
                 visibility: 'hidden',
                 strokeWidth: 0
               }
             };
+          } else if (action === 'show') {
+            // Asegurar que las aristas que deben mostrarse tengan las propiedades correctas
+            return {
+              ...edge,
+              hidden: false,
+              style: {
+                ...edge.style,
+                opacity: 1,
+                visibility: 'visible',
+                strokeWidth: edge.type === 'smoothstep' ? 1.5 : 2,
+                stroke: edge.style?.stroke || '#4299e1'
+              }
+            };
           }
           
-          return {
-            ...edge,
-            hidden: false,
-            style: {
-              ...edge.style,
-              opacity: 1,
-              visibility: 'visible',
-              strokeWidth: edge.style?.strokeWidth || 1.5
-            }
-          };
+          // Si esta arista no está en el mapa de visibilidad, mantener su estado actual
+          return edge;
         })
       );
       
       return updatedNodes;
     });
+    
+    // Opcional: Después de un tiempo, recalcular el layout para arreglar posibles problemas visuales
+    // setTimeout(() => {
+    //   if (autoLayoutRef.current) {
+    //     autoLayoutRef.current();
+    //   }
+    // }, 50);
   }, [setNodes, setEdges]);
 
   // Crear referencia para autoLayout
@@ -1385,8 +1422,53 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     autoLayoutRef.current = enhancedRecalculateLayout;
   }, [enhancedRecalculateLayout]);
 
+  const toggleMenu = () => {
+    setIsMenuOpen(prev => !prev);
+  };
+
   return (
     <div className={`h-full w-full ${darkMode ? 'bg-black' : 'bg-gray-100'} relative`} ref={reactFlowWrapper}>
+      {/* Botón de menú hamburguesa */}
+      <button 
+        onClick={toggleMenu}
+        className="absolute top-2 right-2 z-20 bg-gray-800 text-white p-2 rounded"
+        aria-label="Toggle Menu"
+      >
+        {isMenuOpen ? '✖' : '☰'} {/* Icono de menú hamburguesa */}
+      </button>
+
+      {/* Menú de herramientas */}
+      {isMenuOpen && (
+        <div className="absolute top-16 right-2 z-20 bg-gray-800 text-white p-4 rounded shadow-lg">
+          <div className="flex flex-col gap-2">
+            <button 
+              onClick={() => setLayoutDirection('LR')}
+              className={`control-button ${layoutDirection === 'LR' ? 'active' : ''}`}
+            >
+              Horizontal
+            </button>
+            <button 
+              onClick={() => setLayoutDirection('TB')}
+              className={`control-button ${layoutDirection === 'TB' ? 'active' : ''}`}
+            >
+              Vertical
+            </button>
+            <button 
+              onClick={collapseAllNodes}
+              className="control-button"
+            >
+              Colapsar Todo
+            </button>
+            <button 
+              onClick={expandAllNodes}
+              className="control-button"
+            >
+              Expandir Todo
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Barra de búsqueda mejorada con controles de navegación */}
       <div className="absolute top-2 left-2 z-10 flex flex-col gap-2">
         <div className="flex items-center gap-2">
@@ -1451,93 +1533,6 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
             </button>
           </div>
         )}
-      </div>
-      
-      {/* Panel principal de controles - simplificado */}
-      <div className="absolute top-2 right-2 z-20 tools-panel flex flex-wrap gap-2">
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setLayoutDirection('LR')}
-            className={`control-button ${layoutDirection === 'LR' ? 'active' : ''}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-              <polyline points="12 5 19 12 12 19"></polyline>
-            </svg>
-            Horizontal
-          </button>
-          <button 
-            onClick={() => setLayoutDirection('TB')}
-            className={`control-button ${layoutDirection === 'TB' ? 'active' : ''}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <polyline points="19 12 12 19 5 12"></polyline>
-            </svg>
-            Vertical
-          </button>
-        </div>
-        
-        {/* Segunda fila para el selector de tamaño */}
-        <div className="flex gap-2 w-full">
-          <select 
-            onChange={(e) => setNodeSizeMode(e.target.value)}
-            value={nodeSizeMode}
-            className="size-selector w-full"
-          >
-            <option value="compact">Compacto</option>
-            <option value="medium">Mediano</option>
-            <option value="expanded">Expandido</option>
-          </select>
-        </div>
-        
-        {/* Botón de reorganización */}
-        <div className="flex w-full">
-          <button 
-            onClick={() => {
-              setEdges(prevEdges => 
-                prevEdges.map(edge => ({
-                  ...edge,
-                  animated: false,
-                  style: {
-                    ...edge.style,
-                    transition: 'none'
-                  }
-                }))
-              );
-              autoLayoutRef.current();
-            }}
-            className="control-button reorganize-button w-full"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path>
-            </svg>
-            Reorganizar
-          </button>
-      </div>
-      
-        {/* Botones para expandir/colapsar todo nodos - actualizados */}
-        <div className="flex gap-2 w-full">
-          <button 
-            onClick={collapseAllNodes}
-            className="control-button collapse-button w-1/2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            Colapsar Todo
-          </button>
-          <button 
-            onClick={expandAllNodes}
-            className="control-button expand-button w-1/2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            Expandir Todo
-          </button>
-        </div>
       </div>
       
       {/* ReactFlow con configuración optimizada */}
