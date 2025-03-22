@@ -53,7 +53,7 @@ const LandingPage = ({ onStartEditing }) => {
           <button 
             onClick={onStartEditing}
             onKeyDown={handleKeyDown}
-            className="bg-blue-600 hover:bg-blue-500 text-white py-2 px-5 rounded-full transition-all duration-300 shadow-lg shadow-blue-500/20 flex items-center space-x-1 font-medium"
+            className="bg-blue-600 hover:bg-blue-500 text-white py-2 px-5 rounded-full transition-all duration-300 shadow-lg shadow-blue-500/20 flex items-center space-x-1 font-medium hover:shadow-lg"
             tabIndex="0"
             aria-label="Ir al editor inmediatamente"
           >
@@ -147,7 +147,7 @@ const LandingPage = ({ onStartEditing }) => {
           <button 
             onClick={onStartEditing}
             onKeyDown={handleKeyDown}
-            className="relative mt-6 group bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-lg font-semibold py-4 px-10 rounded-full shadow-lg shadow-blue-600/30 transform hover:-translate-y-1 transition-all duration-300 flex items-center mx-auto overflow-hidden"
+            className="relative mt-6 group bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-lg font-semibold py-4 px-10 rounded-full shadow-lg shadow-blue-600/30 flex items-center mx-auto overflow-hidden transition-all duration-300 hover:shadow-lg"
             tabIndex="0"
             aria-label="Comenzar a usar el editor"
           >
@@ -358,7 +358,7 @@ const LandingPage = ({ onStartEditing }) => {
           <button 
             onClick={onStartEditing}
             onKeyDown={handleKeyDown}
-            className="relative group bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-4 px-12 rounded-full shadow-lg shadow-blue-600/30 transform hover:-translate-y-1 transition-all duration-300 mx-auto overflow-hidden"
+            className="relative group bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-4 px-12 rounded-full shadow-lg shadow-blue-600/30 mx-auto overflow-hidden transition-all duration-300 hover:shadow-lg"
             tabIndex="0"
             aria-label="Ir al editor ahora"
           >
