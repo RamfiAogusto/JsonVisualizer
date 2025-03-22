@@ -296,6 +296,18 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
   const memoizedNodeTypes = useMemo(() => NODE_TYPES, []);
   const memoizedEdgeTypes = useMemo(() => EDGE_TYPES, []);
 
+  // Efecto para actualizar el layout cuando cambia nodeSizeMode
+  useEffect(() => {
+    if (reactFlowInstance && nodes.length > 0) {
+      // Debounce para evitar múltiples actualizaciones rápidas
+      const timer = setTimeout(() => {
+        recalculateLayout();
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [nodeSizeMode, recalculateLayout, reactFlowInstance, nodes.length]);
+
   return (
     <div 
       className={`h-full w-full ${darkMode ? 'bg-black' : 'bg-gray-100'} relative`} 
@@ -309,6 +321,9 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         setLayoutDirection={setLayoutDirection}
         collapseAllNodes={collapseAllNodes}
         expandAllNodes={expandAllNodes}
+        nodeSizeMode={nodeSizeMode}
+        setNodeSizeMode={setNodeSizeMode}
+        recalculateLayout={recalculateLayout}
       />
       
       {/* Controles de búsqueda */}

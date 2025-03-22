@@ -21,53 +21,61 @@ export default function useLayoutEngine(estimateNodeSize, nodeSizeMode) {
     const dagreGraph = new dagre.graphlib.Graph();
     dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-    // AJUSTE 1: Reducir significativamente los valores base de separación
-    let baseSep = nodeSizeMode === 'compact' ? 20 : 
-                 nodeSizeMode === 'expanded' ? 40 : 30;
-    
-    // AJUSTE 2: Reducir los factores de separación
-    let nodeSepFactor = 0.8;
-    let rankSepFactor = 0.8;
-    
-    // Para gráficos con pocos nodos, dar espacio moderado
-    if (safeNodes.length < 20) {
-      nodeSepFactor = 1.0;
-      rankSepFactor = 1.0;
-    } else if (safeNodes.length > 100) {
-      // Para gráficos muy grandes, optimizar aún más el espacio
-      nodeSepFactor = 0.6;
-      rankSepFactor = 0.6;
+    // MODIFICADO: Valores de separación según el modo seleccionado
+    let baseSep;
+    switch (nodeSizeMode) {
+      case 'compact':
+        baseSep = 30; // Compacto pero con espacio suficiente
+        break;
+      case 'expanded':
+        baseSep = 80; // Amplio espaciado
+        break;
+      case 'medium':
+      default:
+        baseSep = 50; // Valor medio
+        break;
     }
     
-    // Aplicar factores de espaciado según dirección
-    const nodesep = baseSep * (direction === 'LR' ? 1.0 : 0.8) * nodeSepFactor;
-    const ranksep = baseSep * (direction === 'TB' ? 1.0 : 0.8) * rankSepFactor;
+    // Factores de separación ajustados
+    let nodeSepFactor = 1.2; // Mayor separación horizontal
+    let rankSepFactor = 1.3; // Mayor separación vertical
     
-    // AJUSTE 3: Configuración mejorada del grafo para layout más compacto
+    // Ajuste dinámico según cantidad de nodos
+    if (safeNodes.length < 20) {
+      // Más espacio para pocos nodos
+      nodeSepFactor = 1.5;
+      rankSepFactor = 1.6;
+    } else if (safeNodes.length > 100) {
+      // Menos espacio (pero suficiente) para muchos nodos
+      nodeSepFactor = 0.9;
+      rankSepFactor = 1.0;
+    }
+    
+    // Calculamos separaciones finales
+    const nodesep = baseSep * (direction === 'LR' ? 1.0 : 0.9) * nodeSepFactor;
+    const ranksep = baseSep * (direction === 'TB' ? 1.0 : 0.9) * rankSepFactor;
+    
+    // Configuración mejorada para mejor espaciado
     dagreGraph.setGraph({ 
       rankdir: direction,
       ranksep,
       nodesep,
-      marginx: 20, // Reducir márgenes
-      marginy: 20, // Reducir márgenes
-      align: direction === 'LR' ? 'UL' : 'DL',
-      ranker: 'network-simplex', // Cambiar a un algoritmo que favorece la compactación
+      marginx: 40, // Margen horizontal
+      marginy: 40, // Margen vertical
+      align: 'UL', // Alineación más natural
+      ranker: 'tight-tree', // Mejor algoritmo para jerarquías
       acyclicer: 'greedy',
-      // Utilizar separación forzada pero más compacta
-      edgesep: baseSep * 0.2,
-      // Preferir layout más compacto
+      edgesep: baseSep * 0.4, // Mayor separación entre aristas
       rankSep: ranksep,
-      // AJUSTE 4: Aumentar la gravedad para atraer nodos entre sí
-      gravity: 0.8,
+      gravity: 0.6, // Atracción moderada
     });
 
-    // AJUSTE 5: Reducir los márgenes de seguridad en los nodos
+    // Configurar nodos con mayor margen
     safeNodes.forEach((node) => {
       try {
-        // Obtener dimensiones precisas con margen adicional reducido
         const { width, height } = estimateNodeSize(node);
-        // Reducir el margen de seguridad
-        const safetyMargin = 5; // Reducido de 15
+        // MODIFICADO: Aumentar margen de seguridad
+        const safetyMargin = 15; // Margen moderado
         
         dagreGraph.setNode(node.id, { 
           width: width + safetyMargin, 
@@ -75,8 +83,7 @@ export default function useLayoutEngine(estimateNodeSize, nodeSizeMode) {
         });
       } catch (error) {
         console.warn(`Error procesando nodo ${node.id}:`, error);
-        // Usar tamaño predeterminado con margen si hay error
-        dagreGraph.setNode(node.id, { width: 180, height: 50 });
+        dagreGraph.setNode(node.id, { width: 180, height: 120 });
       }
     });
 
@@ -97,7 +104,7 @@ export default function useLayoutEngine(estimateNodeSize, nodeSizeMode) {
       return { nodes: safeNodes, edges: safeEdges };
     }
 
-    // Procesar los nodos con el nuevo layout y verificar superposiciones
+    // Procesar los nodos con el nuevo layout
     const layoutedNodes = safeNodes.map((node) => {
       try {
         const nodeWithPosition = dagreGraph.node(node.id);
@@ -121,7 +128,6 @@ export default function useLayoutEngine(estimateNodeSize, nodeSizeMode) {
         };
       } catch (error) {
         console.warn(`Error posicionando nodo ${node.id}:`, error);
-        // También aquí permitimos que sea arrastrable
         return { ...node, draggable: true };
       }
     });
