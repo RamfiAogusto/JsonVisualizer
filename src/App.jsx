@@ -1,12 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import JsonEditor from './components/JsonEditor';
 import DiagramView from './components/DiagramView/index';
 import StatsBar from './components/StatsBar';
+import LandingPage from './components/LandingPage';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import './App.css';
 
-function App() {
+function App({ startWithEditor = false }) {
   const [jsonData, setJsonData] = useState(initialJson);
+  const [showEditor, setShowEditor] = useState(startWithEditor);
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Efecto para sincronizar la URL con el estado de la aplicación
+  useEffect(() => {
+    if (location.pathname === '/editor' && !showEditor) {
+      setShowEditor(true);
+    } else if (location.pathname === '/' && showEditor && !startWithEditor) {
+      setShowEditor(false);
+    }
+  }, [location.pathname, showEditor, startWithEditor]);
   
   const handleJsonChange = (newJsonData) => {
     try {
@@ -14,6 +28,17 @@ function App() {
     } catch (error) {
       console.error("Error al actualizar JSON:", error);
     }
+  };
+
+  const handleStartEditing = () => {
+    setShowEditor(true);
+    navigate('/editor');
+  };
+
+  // Función para volver a la landing page
+  const handleBackToLanding = () => {
+    setShowEditor(false);
+    navigate('/');
   };
 
   // Función para cargar JSON desde archivo
@@ -49,10 +74,35 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  // Si no estamos mostrando el editor, mostrar la landing page
+  if (!showEditor) {
+    return <LandingPage onStartEditing={handleStartEditing} />;
+  }
+
+  // Si estamos mostrando el editor
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white">
       <header className="bg-gray-900 p-4 flex items-center justify-between border-b border-blue-900/40 shadow-md">
         <div className="flex items-center gap-3">
+          <button 
+            onClick={handleBackToLanding}
+            className="p-2 bg-gray-800 hover:bg-gray-700 rounded-md transition-all duration-200 flex items-center"
+            aria-label="Volver a inicio"
+            tabIndex="0"
+          >
+            <svg 
+              className="w-5 h-5 text-blue-400" 
+              xmlns="http://www.w3.org/2000/svg" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+            >
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </button>
           <svg 
             className="w-7 h-7 text-blue-500" 
             xmlns="http://www.w3.org/2000/svg" 
