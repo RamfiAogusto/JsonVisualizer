@@ -721,8 +721,8 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
             ...node,
         style: {
               ...node.style,
-          opacity: isHighlighted ? 1 : 0.15,
-          filter: isHighlighted ? 'none' : 'grayscale(0.8) blur(0.8px)',
+          opacity: isHighlighted ? 1 : 0.4, // Aumentado de 0.15 a 0.4 para mejor visibilidad
+          filter: isHighlighted ? 'none' : 'grayscale(0.5) blur(0.5px)', // Reducido el grayscale y blur
           boxShadow: isHighlighted 
             ? '0 0 0 2px #fbbf24, 0 0 10px rgba(251, 191, 36, 0.6)' 
             : 'none',
