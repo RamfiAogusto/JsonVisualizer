@@ -21,24 +21,13 @@ import SearchBar from './SearchBar';
 import { debounce } from 'lodash';
 
 // Primero definimos todos los componentes de nodos
-const ObjectNode = ({ data, id, selected }) => {
+const ObjectNode = ({ data, id }) => {
   const collapsed = data.collapsed || false;
   const hasChildren = data.childrenCount && data.childrenCount > 0;
   
-  const toggleCollapsed = (e) => {
-    e.stopPropagation();
-    if (data.onToggleCollapse) {
-      data.onToggleCollapse(id);
-    }
-  };
-  
   return (
-    <div className={`node-container px-4 py-3 rounded-md border border-gray-700 bg-gray-900 min-w-[220px] ${collapsed ? 'collapsed-node' : ''}`}>
-      <Handle 
-        type="target" 
-        position={Position.Left} 
-        className="handle-custom"
-      />
+    <div className={`node-container ${collapsed ? 'collapsed-node' : ''}`}>
+      <Handle type="target" position={Position.Left} className="handle-custom" />
       <div className="flex justify-between items-center">
         {data.label && (
           <div className="text-sm text-blue-400 mb-1 font-medium flex items-center">
@@ -52,9 +41,11 @@ const ObjectNode = ({ data, id, selected }) => {
         )}
         {hasChildren && (
           <button 
-            className="collapse-btn w-6 h-6 flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700"
-            onClick={toggleCollapsed}
-            title={collapsed ? "Expandir nodos hijos" : "Colapsar nodos hijos"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (data.onToggleCollapse) data.onToggleCollapse(id);
+            }}
+            className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700"
           >
             <span className="text-xs text-gray-300">{collapsed ? '+' : '−'}</span>
           </button>
@@ -73,33 +64,18 @@ const ObjectNode = ({ data, id, selected }) => {
           <span>{data.childrenCount} nodos anidados ocultos</span>
         </div>
       )}
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        className="handle-custom"
-      />
+      <Handle type="source" position={Position.Right} className="handle-custom" />
     </div>
   );
 };
 
-const ArrayNode = ({ data, id, selected }) => {
+const ArrayNode = ({ data, id }) => {
   const collapsed = data.collapsed || false;
   const hasChildren = data.childrenCount && data.childrenCount > 0;
   
-  const toggleCollapsed = (e) => {
-    e.stopPropagation();
-    if (data.onToggleCollapse) {
-      data.onToggleCollapse(id);
-    }
-  };
-  
   return (
-    <div className={`node-container px-4 py-3 rounded-md border border-gray-700 bg-gray-900 min-w-[220px] ${collapsed ? 'collapsed-node' : ''}`}>
-      <Handle 
-        type="target" 
-        position={Position.Left} 
-        className="handle-custom"
-      />
+    <div className={`node-container ${collapsed ? 'collapsed-node' : ''}`}>
+      <Handle type="target" position={Position.Left} className="handle-custom" />
       <div className="flex justify-between items-center">
         <div className="text-lg text-yellow-400 font-medium flex items-center">
           {data.label} [{data.length}]
@@ -111,9 +87,11 @@ const ArrayNode = ({ data, id, selected }) => {
         </div>
         {hasChildren && (
           <button 
-            className="collapse-btn w-6 h-6 flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700"
-            onClick={toggleCollapsed}
-            title={collapsed ? "Expandir nodos hijos" : "Colapsar nodos hijos"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (data.onToggleCollapse) data.onToggleCollapse(id);
+            }}
+            className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700"
           >
             <span className="text-xs text-gray-300">{collapsed ? '+' : '−'}</span>
           </button>
@@ -125,11 +103,7 @@ const ArrayNode = ({ data, id, selected }) => {
           <span>{data.childrenCount} elementos ocultos</span>
         </div>
       )}
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        className="handle-custom"
-      />
+      <Handle type="source" position={Position.Right} className="handle-custom" />
     </div>
   );
 };
@@ -200,9 +174,15 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
   
   // Referencias estables para evitar problemas de dependencias circulares
   const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+  
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
   
   // Función auxiliar para estimar el tamaño de un nodo basado en su contenido
   const estimateNodeSize = useCallback((node) => {
@@ -387,12 +367,6 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     return { nodes: layoutedNodes, edges: safeEdges };
   }, [nodeSizeMode, estimateNodeSize]);
 
-  // Referencia estable para las aristas
-  const edgesRef = useRef(edges);
-  useEffect(() => {
-    edgesRef.current = edges;
-  }, [edges]);
-  
   // Función para manejar el colapso de nodos individual sin dependencias circulares
   const handleNodeCollapse = useCallback((nodeId) => {
     // Utilizar los refs para acceder a los valores más recientes
@@ -505,14 +479,14 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
               ...node.data,
               collapsed: newCollapsedState,
               manuallyToggled: true
-            }
+            },
+            position: node.position // Mantener la posición actual
           };
         }
         
         // Ocultar/mostrar los nodos descendientes
         if (allDescendants.includes(node.id)) {
           if (newCollapsedState) {
-            // Guardamos el estilo anterior al ocultar
             return {
               ...node,
               savedStyle: node.style || {},
@@ -524,20 +498,22 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
                 pointerEvents: 'none',
               },
               hidden: true,
-              isHiddenByParent: true
+              isHiddenByParent: true,
+              position: node.position // Mantener la posición actual
             };
           } else {
-            // Restauramos el estilo guardado al mostrar de nuevo
             return {
               ...node,
               style: node.savedStyle || {
+                ...node.style,
                 opacity: 1,
                 visibility: 'visible',
                 zIndex: 0,
                 pointerEvents: 'auto',
               },
               hidden: false,
-              isHiddenByParent: false
+              isHiddenByParent: false,
+              position: node.position // Mantener la posición actual
             };
           }
         }
@@ -548,25 +524,20 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       // Actualizar las aristas inmediatamente
       setEdges(updatedEdges);
       
-      // Recalcular el layout después de un tiempo suficiente para que las animaciones se completen
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          const autoLayoutBtn = document.getElementById('auto-layout-btn');
-          if (autoLayoutBtn) {
-            autoLayoutBtn.click();
-          }
-        }, 50);
-      });
-      
       return updatedNodes;
     });
   }, [setNodes, setEdges]);
+
+  // Referencia para la función handleNodeCollapse
+  const handleNodeCollapseRef = useRef(handleNodeCollapse);
+  useEffect(() => {
+    handleNodeCollapseRef.current = handleNodeCollapse;
+  }, [handleNodeCollapse]);
 
   // Función para cambiar el nivel de colapso
   const changeCollapseLevel = useCallback((level) => {
     setLevelThreshold(level);
     
-    // Actualizar los nodos según el nivel
     const currentEdges = edgesRef.current;
     
     setNodes(prevNodes => {
@@ -713,25 +684,9 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       // Actualizar las aristas inmediatamente
       setEdges(updatedEdges);
       
-      // Programar el recálculo del layout para después de las actualizaciones visuales
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          const autoLayoutBtn = document.getElementById('auto-layout-btn');
-          if (autoLayoutBtn) {
-            autoLayoutBtn.click();
-          }
-        }, 50);
-      });
-      
       return finalNodes;
     });
   }, [setNodes, setEdges]);
-
-  // Referencia para la función handleNodeCollapse
-  const handleNodeCollapseRef = useRef(handleNodeCollapse);
-  useEffect(() => {
-    handleNodeCollapseRef.current = handleNodeCollapse;
-  }, [handleNodeCollapse]);
 
   // Función para crear los nodos iniciales con mejor manejo de datos
   const createNodes = useCallback((jsonData) => {
@@ -914,12 +869,15 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     const collapsedStateChanged = nodes.some(node => node.data && node.data.manuallyToggled);
     
     if (collapsedStateChanged) {
+      // Eliminar este setTimeout que fuerza el reajuste
+      /*
       const autoLayoutBtn = document.getElementById('auto-layout-btn');
       if (autoLayoutBtn) {
         setTimeout(() => {
           autoLayoutBtn.click();
         }, 150);
       }
+      */
     }
   }, [nodes]);
 
@@ -1093,74 +1051,37 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     }
   }, [selectedNodeId, setEdges, setNodes]);
 
-  // Optimizar la función recalculateLayout para mejorar el rendimiento de fitView
+  // Optimizar la función recalculateLayout
   const recalculateLayout = useCallback(() => {
     if (reactFlowInstance) {
       try {
-        // Indicar visualmente que estamos recalculando
         document.body.classList.add('viewport-transforming');
         
-        // Reducción de la precisión visual durante transformaciones
-          setEdges(prevEdges => 
-            prevEdges.filter(edge => edge && edge.id)
-              .map(edge => ({
-                ...edge, 
-              className: `${edge.className || ''} updating`.trim(),
-              // Simplificar visual durante transformación
-              style: {
-                ...edge.style,
-                strokeWidth: 1,
-                transition: 'none'
-              }
-              }))
-          );
-          
-        // Recalcular layout con optimizaciones
-            const { nodes: newNodes, edges: newEdges } = getLayoutedElements(
-              nodesRef.current,
-              edgesRef.current,
-              layoutDirection
-            );
-            
-        // Actualizar nodos de manera eficiente
-            setNodes(newNodes);
-            
-        // Usar un valor corto para la duración de fitView para mejor rendimiento
-            setTimeout(() => {
+        const { nodes: newNodes, edges: newEdges } = getLayoutedElements(
+          nodesRef.current,
+          edgesRef.current,
+          layoutDirection
+        );
+        
+        setNodes(newNodes);
+        setEdges(newEdges);
+        
+        // Usar un fitView más rápido y mantener la interactividad
+        setTimeout(() => {
           if (reactFlowInstance) {
-              try {
-              // Configuración optimizada para fitView
-                reactFlowInstance.fitView({
-                padding: 0.1, // Reducción del padding para mejor rendimiento
-                  includeHiddenNodes: false,
-                duration: 200, // Reducir duración para mayor velocidad
-                maxZoom: 1.5  // Limitar el zoom máximo para evitar procesamiento excesivo
-                });
-              
-              // Quitar clase de transformación después de que termine
-              setTimeout(() => {
-                document.body.classList.remove('viewport-transforming');
-                
-                // Restaurar estilos visuales normales
-                setEdges(prevEdges => 
-                  prevEdges.filter(edge => edge && edge.id)
-                    .map(edge => ({
-                      ...edge, 
-                      className: (edge.className || '').replace('updating', '').trim(),
-                  style: {
-                    ...edge.style,
-                        strokeWidth: edge.style?.strokeWidth || 1.5,
-                        transition: null
-                      }
-                    }))
-                );
-              }, 250);
-            } catch (error) {
-              console.warn("Error al ajustar la vista:", error);
+            reactFlowInstance.fitView({
+              padding: 0.1,
+              includeHiddenNodes: false,
+              duration: 100,
+              maxZoom: 1.5
+            });
+            
+            // Quitar la clase de transformación más rápido
+            setTimeout(() => {
               document.body.classList.remove('viewport-transforming');
-            }
+            }, 100);
           }
-        }, 10); // Reducir el tiempo de espera para comenzar fitView
+        }, 10);
         
       } catch (error) {
         console.warn("Error en el recálculo del layout:", error);
@@ -1197,7 +1118,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
           reactFlowInstance.fitView({
             padding: 0.1,
             includeHiddenNodes: false,
-            duration: 200,
+            duration: 150,
             maxZoom: 1.5
           });
           
@@ -1222,56 +1143,55 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     }
   }, [reactFlowInstance, setNodes]);
 
-  // Optimización crítica de los handlers de arrastre
+  // En la sección de referencias del componente (cerca de la línea 50)
+  const dragStartRef = useRef(false);
+
+  // Modificar la función onNodeDragStart (línea 1157)
   const onNodeDragStart = useCallback((event, node) => {
-    // Desactivar todas las transiciones y animaciones durante el arrastre
+    if (dragStartRef.current) return;
+    dragStartRef.current = true;
+
     document.body.classList.add('dragging-active');
     
-    // Marcar este nodo como el que se está arrastrando para optimizaciones
-    setNodes(prevNodes => 
-      prevNodes.map(n => ({
-        ...n,
-        isDragging: n.id === node.id,
-        // Desactivar las transiciones para todos los nodos durante el arrastre
-        style: {
-          ...n.style,
-          transition: 'none'
-        }
-      }))
-    );
+    setNodes(prevNodes => {
+      return prevNodes.map(n => 
+        n.id === node.id ? {
+          ...n,
+          isDragging: true,
+          style: {
+            ...n.style,
+            transition: 'none',
+            zIndex: 1000
+          }
+        } : n
+      );
+    });
   }, [setNodes]);
 
-  // Esta función usa throttling implícito al ser muy específica
   const onNodeDrag = useCallback((event, node) => {
-    // Usar requestAnimationFrame para limitar actualizaciones y mejorar rendimiento
+    // Usar requestAnimationFrame de manera más eficiente
     if (!window.dragAnimationFrame) {
       window.dragAnimationFrame = requestAnimationFrame(() => {
-        // Solo actualizar las aristas directamente conectadas
+        // Actualizar solo las aristas conectadas al nodo actual
         const connectedEdges = edgesRef.current.filter(edge => 
           edge.source === node.id || edge.target === node.id
         );
         
         if (connectedEdges.length > 0) {
-          setEdges(prevEdges => {
-            // Solo actualizamos los bordes conectados al nodo arrastrado
-            return prevEdges.map(edge => {
-              if (connectedEdges.some(e => e.id === edge.id)) {
-                return {
-                  ...edge,
-                  // Aplicar estilo simplificado durante el arrastre
-                  className: 'dragging-edge',
-                  // Evitar animaciones durante el arrastre
-                  animated: false,
-                  style: {
-                    ...edge.style,
-                    transition: 'none',
-                    strokeDasharray: '5,5' // Estilo visual ligero durante arrastre
-                  }
-                };
-              }
-              return edge;
-            });
-          });
+          setEdges(prevEdges => 
+            prevEdges.map(edge => 
+              connectedEdges.some(e => e.id === edge.id) ? {
+                ...edge,
+                className: 'dragging-edge',
+                animated: false,
+                style: {
+                  ...edge.style,
+                  transition: 'none',
+                  strokeDasharray: '5,5'
+                }
+              } : edge
+            )
+          );
         }
         
         window.dragAnimationFrame = null;
@@ -1280,62 +1200,49 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
   }, [setEdges]);
 
   const onNodeDragStop = useCallback((event, node) => {
-    // Cancelar cualquier frame pendiente
-    if (window.dragAnimationFrame) {
-      cancelAnimationFrame(window.dragAnimationFrame);
-      window.dragAnimationFrame = null;
-    }
-    
-    // Restaurar todas las transiciones
+    dragStartRef.current = false; // Resetear la referencia
     document.body.classList.remove('dragging-active');
     
-    // Restaurar nodos
-    setNodes(prevNodes => 
-      prevNodes.map(n => ({
-        ...n,
-        isDragging: false,
-        // Restaurar transiciones con un ligero retraso para evitar saltos
-        style: {
-          ...n.style,
-          transition: null // Null para que use el valor por defecto de CSS
-        }
-      }))
-    );
-    
-    // Restaurar los estilos de los bordes
-    setEdges(prevEdges => 
-      prevEdges.map(edge => ({
-        ...edge,
-        className: edge.className?.replace('dragging-edge', '') || '',
-        style: {
-          ...edge.style,
-          transition: null,
-          strokeDasharray: null
-        }
-      }))
-    );
-    
-    // Evitamos recalcular el layout automáticamente después del arrastre
-    // para que el usuario pueda posicionar manualmente
+    // Restaurar estados en un solo batch
+    requestAnimationFrame(() => {
+      setNodes(prevNodes => 
+        prevNodes.map(n => 
+          n.id === node.id ? {
+            ...n,
+            isDragging: false,
+            style: {
+              ...n.style,
+              transition: null,
+              zIndex: 1
+            }
+          } : n
+        )
+      );
+      
+      setEdges(prevEdges => 
+        prevEdges.map(edge => ({
+          ...edge,
+          className: edge.className?.replace('dragging-edge', '') || '',
+          style: {
+            ...edge.style,
+            transition: null,
+            strokeDasharray: null
+          }
+        }))
+      );
+    });
   }, [setNodes, setEdges]);
 
-  // Agregar un handler para cambios en los nodos para manejar correctamente el arrastre
+  // Optimizar el manejo de cambios en nodos
   const onNodesChange = useCallback((changes) => {
-    // Este es un reemplazo eficiente para setNodes(applyNodeChanges(changes, nodes))
-    // que evita recreaciones innecesarias del estado
-    setNodes(nodes => {
-      // Filtramos los cambios para ignorar ciertos tipos durante el arrastre
-      const filteredChanges = changes.filter(change => {
-        // Si estamos arrastrando, solo procesamos cambios de posición
-        if (document.body.classList.contains('dragging-active')) {
-          return change.type === 'position';
-        }
-        return true;
-      });
-      
-      if (filteredChanges.length === 0) return nodes;
-      return applyNodeChanges(filteredChanges, nodes);
-    });
+    // Filtrar cambios durante el arrastre
+    const filteredChanges = document.body.classList.contains('dragging-active')
+      ? changes.filter(change => change.type === 'position')
+      : changes;
+    
+    if (filteredChanges.length === 0) return;
+    
+    setNodes(nodes => applyNodeChanges(filteredChanges, nodes));
   }, [setNodes]);
 
   return (
@@ -1445,7 +1352,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       </div>
       
       {/* Indicador de nodos ocultos */}
-      <div className="absolute bottom-2 left-2 z-10 bg-gray-800 bg-opacity-80 rounded px-3 py-1 text-xs text-white">
+      <div className="react-flow__viewport-info">
         Profundidad máxima: {maxDepth} | Mostrando hasta nivel: {levelThreshold}
       </div>
       
@@ -1460,9 +1367,10 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         onInit={setReactFlowInstance}
         fitView
         fitViewOptions={{ 
-          padding: 0.1, 
-          includeHiddenNodes: false,
-          duration: 200
+          padding: 0.2, 
+          includeHiddenNodes: true,
+          duration: 300,
+          maxZoom: 1.2
         }}
         minZoom={0.1}
         maxZoom={2}
@@ -1472,19 +1380,28 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         defaultEdgeOptions={{
           type: 'smoothstep',
           style: { strokeWidth: 1.5 },
-          animated: false,
+          animated: false
         }}
+        panOnDrag={true}
+        panOnScroll={false}
+        zoomOnScroll={true}
+        preventScrolling={true}
+        selectionOnDrag={false}
+        panOnDragType="free"
         className="animate-layout-transition"
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         onError={(error) => console.warn("ReactFlow error:", error)}
         nodesDraggable={true}
-        edgesFocusable={true}
+        nodesConnectable={false}
+        elementsSelectable={true}
+        selectNodesOnDrag={false}
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
-        elementsSelectable={true}
-        selectNodesOnDrag={false}
+        draggable={true}
+        zoomOnDoubleClick={false}
+        translateExtent={[[-Infinity, -Infinity], [Infinity, Infinity]]}
       >
         <Background 
           color={darkMode ? "#333" : "#e5e7eb"} 
@@ -1497,7 +1414,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
           showInteractive={false}
           fitViewOptions={{ 
             padding: 0.1, 
-            duration: 200 
+            duration: 150
           }}
           onFitView={handleFitView}
           position="bottom-right"
