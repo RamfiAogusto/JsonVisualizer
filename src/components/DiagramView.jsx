@@ -367,6 +367,31 @@ const EDGE_TYPES = Object.freeze({
   customEdge: CustomEdge,
 });
 
+// Modificar el componente LockButton para que sea exactamente igual a los botones estándar de ReactFlow
+const LockButton = ({ locked, onClick }) => (
+  <button
+    type="button"
+    className="react-flow__controls-button"
+    onClick={onClick}
+    title={locked ? "Desbloquear nodos" : "Bloquear nodos"}
+    aria-label={locked ? "Desbloquear nodos" : "Bloquear nodos"}
+  >
+    {locked ? (
+      // Icono de candado abierto cuando está bloqueado
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+    ) : (
+      // Icono de candado cerrado cuando está desbloqueado
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+      </svg>
+    )}
+  </button>
+);
+
 const DiagramView = ({ jsonData, darkMode = true }) => {
   // No necesitamos useMemo aquí - usamos los objetos predefinidos y congelados
   // que ya están definidos fuera del componente
@@ -393,6 +418,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
   const edgesRef = useRef(edges);
   
   const [isMenuOpen, setIsMenuOpen] = useState(false); // Estado para el menú hamburguesa
+  const [nodesDraggable, setNodesDraggable] = useState(true); // Nuevo estado para controlar si los nodos pueden arrastrarse
   
   useEffect(() => {
     nodesRef.current = nodes;
@@ -717,11 +743,18 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
   // En la sección de referencias del componente (cerca de la línea 50)
   const dragStartRef = useRef(false);
 
-  // Modificar la función onNodeDragStart (línea 1157)
+  // Modificar la función onNodeDragStart para que sea más estricta
   const onNodeDragStart = useCallback((event, node) => {
+    // Si los nodos no son arrastrables, detener COMPLETAMENTE el evento y retornar
+    if (!nodesDraggable) {
+      event.preventDefault();
+      event.stopPropagation();
+      return false;
+    }
+    
     if (dragStartRef.current) return;
+    
     dragStartRef.current = true;
-
     document.body.classList.add('dragging-active');
     
     setNodes(prevNodes => {
@@ -737,7 +770,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         } : n
       );
     });
-  }, [setNodes]);
+  }, [setNodes, nodesDraggable]);
 
   const onNodeDrag = useCallback((event, node) => {
     // Usar requestAnimationFrame de manera más eficiente
@@ -1583,9 +1616,28 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     autoLayoutRef.current = enhancedRecalculateLayout;
   }, [enhancedRecalculateLayout]);
 
+  // Función para alternar la capacidad de arrastrar nodos
+  const toggleNodesDraggable = useCallback(() => {
+    setNodesDraggable(prevState => !prevState);
+  }, []);
+
   const toggleMenu = () => {
     setIsMenuOpen(prev => !prev);
   };
+
+  // Modificar el useEffect que se ejecuta cuando el estado nodesDraggable cambia
+  useEffect(() => {
+    // Cuando el estado de draggable cambia, forzar la actualización en todos los nodos
+    setNodes(prevNodes => prevNodes.map(node => ({
+      ...node,
+      draggable: nodesDraggable, // Asegurar que cada nodo individual tenga el atributo draggable actualizado
+      style: {
+        ...node.style,
+        // Opcional: aplicar un estilo visual si están bloqueados
+        cursor: nodesDraggable ? 'grab' : 'default',
+      }
+    })));
+  }, [nodesDraggable, setNodes]);
 
   return (
     <div className={`h-full w-full ${darkMode ? 'bg-black' : 'bg-gray-100'} relative`} ref={reactFlowWrapper}>
@@ -1702,7 +1754,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         edges={edges}
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
-        onNodesChange={onNodesChange}
+        onNodesChange={nodesDraggable ? onNodesChange : null} // No procesar cambios si están bloqueados
         onEdgesChange={null}
         onInit={setReactFlowInstance}
         fitView
@@ -1731,13 +1783,13 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         onError={(error) => console.warn("ReactFlow error:", error)}
-        nodesDraggable={true}
+        nodesDraggable={nodesDraggable}
         nodesConnectable={false}
         elementsSelectable={true}
         selectNodesOnDrag={false}
         onNodeDragStart={onNodeDragStart}
-        onNodeDrag={onNodeDrag}
-        onNodeDragStop={onNodeDragStop}
+        onNodeDrag={nodesDraggable ? onNodeDrag : null} // No procesar arrastre si están bloqueados
+        onNodeDragStop={nodesDraggable ? onNodeDragStop : null} // No procesar fin de arrastre si están bloqueados
         draggable={true}
         zoomOnDoubleClick={false}
         translateExtent={[[-Infinity, -Infinity], [Infinity, Infinity]]}
@@ -1747,6 +1799,8 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
           gap={16} 
           size={1}
         />
+        
+        {/* Controles con el botón de bloqueo integrado */}
         <Controls 
           showZoom={true}
           showFitView={true}
@@ -1757,7 +1811,13 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
           }}
           onFitView={handleFitView}
           position="bottom-left"
-        />
+        >
+          <LockButton 
+            locked={!nodesDraggable} 
+            onClick={toggleNodesDraggable} 
+          />
+        </Controls>
+        
         <MiniMap 
           nodeColor={(node) => {
             switch (node.type) {
@@ -1773,15 +1833,6 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
           }}
           position="bottom-right"
         />
-        
-        {/* Panel oculto para auto-layout */}
-        <Panel position="bottom-center" className="bg-transparent">
-          <button
-            className="hidden"
-            onClick={() => autoLayoutRef.current()}
-            id="auto-layout-btn"
-          />
-        </Panel>
       </ReactFlow>
     </div>
   );
