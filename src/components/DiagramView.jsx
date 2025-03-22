@@ -52,12 +52,14 @@ const ObjectNode = ({ data, id }) => {
         )}
       </div>
       
-      {!collapsed && data.properties && data.properties.map((prop) => (
+      {/* Mostrar siempre las propiedades, independientemente del estado de colapso */}
+      {data.properties && data.properties.map((prop) => (
         <div key={prop.key} className="flex justify-between text-xs py-1">
           <span className="text-blue-400">{prop.key}:</span>
           <span className="text-green-400 ml-2">{prop.value}</span>
         </div>
       ))}
+      
       {collapsed && hasChildren && (
         <div className="text-xs text-gray-400 py-1 flex items-center">
           <span className="w-2 h-2 bg-blue-400 rounded-full inline-block mr-2"></span>
@@ -97,6 +99,8 @@ const ArrayNode = ({ data, id }) => {
           </button>
         )}
       </div>
+      
+      {/* Mostrar siempre las propiedades, independientemente del estado de colapso */}
       {collapsed && hasChildren && (
         <div className="text-xs text-gray-400 py-1 flex items-center">
           <span className="w-2 h-2 bg-yellow-400 rounded-full inline-block mr-2"></span>
