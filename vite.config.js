@@ -30,8 +30,8 @@ export default defineConfig({
       allow: ['..'],
     },
     headers: {
-      "*.worker.js": {
-        "Content-Type": "application/javascript"
+      '*.worker.js': {
+        'Content-Type': 'application/javascript'
       }
     }
   },
@@ -40,5 +40,6 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
+    plugins: []
   },
 })

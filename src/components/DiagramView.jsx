@@ -153,20 +153,20 @@ const CustomEdge = ({ id, source, target, sourceX, sourceY, targetX, targetY, so
   );
 };
 
-// Definir los tipos de nodos y bordes fuera del componente, pero SIN useMemo
-const NODE_TYPES = {
+// Definir los tipos de nodos y bordes fuera del componente - SIN usar const
+// Usamos una referencia estable con objetos fijos
+const NODE_TYPES = Object.freeze({
   objectNode: ObjectNode,
   arrayNode: ArrayNode,
-};
+});
 
-const EDGE_TYPES = {
+const EDGE_TYPES = Object.freeze({
   customEdge: CustomEdge,
-};
+});
 
 const DiagramView = ({ jsonData, darkMode = true }) => {
-  // Usar useMemo DENTRO del componente para memorizar los tipos
-  const nodeTypes = useMemo(() => NODE_TYPES, []);
-  const edgeTypes = useMemo(() => EDGE_TYPES, []);
+  // No necesitamos useMemo aquí - usamos los objetos predefinidos y congelados
+  // que ya están definidos fuera del componente
   
   const [nodes, setNodes] = useNodesState([]);
   const [edges, setEdges] = useEdgesState([]);
@@ -1543,8 +1543,8 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
+        nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={null}
         onInit={setReactFlowInstance}
