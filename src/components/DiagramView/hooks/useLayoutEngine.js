@@ -55,6 +55,7 @@ export default function useLayoutEngine(estimateNodeSize, nodeSizeMode) {
     const nodesep = baseSep * (direction === 'LR' ? 1.0 : 0.9) * nodeSepFactor;
     const ranksep = baseSep * (direction === 'TB' ? 1.0 : 0.9) * rankSepFactor;
     
+    
     // Configuración mejorada para mejor espaciado
     dagreGraph.setGraph({ 
       rankdir: direction,
