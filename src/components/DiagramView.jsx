@@ -19,6 +19,192 @@ import dagre from 'dagre';
 import 'reactflow/dist/style.css';
 import SearchBar from './SearchBar';
 import { debounce } from 'lodash';
+import ReactDOM from 'react-dom';
+
+// Actualizar los estilos adicionales para nodos
+const nodeStyles = `
+  .node-container {
+    padding: 8px;
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+    max-width: 220px;
+    overflow: visible !important;
+  }
+  
+  .handle-custom {
+    width: 6px;
+    height: 6px;
+    background-color: #555;
+    border: 1px solid #888;
+  }
+  
+  .node-highlight {
+    box-shadow: 0 0 0 2px #4299e1, 0 0 8px rgba(66, 153, 225, 0.6);
+  }
+  
+  .edge-highlight {
+    stroke: #4299e1 !important;
+    stroke-width: 2px !important;
+  }
+  
+  /* Estilos para popup de texto */
+  .text-popup {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(2px);
+    z-index: 99999 !important; /* Aumentado para estar sobre todo */
+  }
+  
+  /* Asegurar que los nodos y sus contenedores no ocultan contenido emergente */
+  .react-flow__node {
+    overflow: visible !important;
+  }
+  
+  .react-flow__node .react-flow__handle {
+    z-index: 1;
+  }
+  
+  /* Todo dentro del nodo debe ser visible */
+  .node-container > * {
+    overflow: visible !important;
+  }
+  
+  /* Solo el contenido interno del texto debe ser truncado */
+  .node-container .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  /* Estilos para la parte interna del nodo */
+  .node-content {
+    overflow: hidden;
+  }
+`;
+
+// Inyectar estilos una sola vez
+if (typeof document !== 'undefined') {
+  const styleId = 'diagram-node-styles';
+  if (!document.getElementById(styleId)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    styleEl.textContent = nodeStyles;
+    document.head.appendChild(styleEl);
+  }
+}
+
+// Actualizado componente TruncatedText para solucionar problemas de visualización
+const TruncatedText = ({ text, maxLength = 15 }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [coords, setCoords] = useState({ x: 0, y: 0 });
+  const textRef = useRef(null);
+  const popupRef = useRef(null);
+
+  // Actualizar posición cuando se muestra el popup
+  useEffect(() => {
+    if (isExpanded && textRef.current) {
+      const rect = textRef.current.getBoundingClientRect();
+      
+      // Calcular una posición que evite que se salga de la pantalla
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      // Posición inicial cerca del texto pero fuera del nodo
+      let x = rect.left;
+      let y = rect.bottom + 10;
+      
+      // Ajustar para que el popup no se salga de la pantalla
+      if (popupRef.current) {
+        const popupWidth = popupRef.current.offsetWidth;
+        const popupHeight = popupRef.current.offsetHeight;
+        
+        // Ajustar horizontalmente si es necesario
+        if (x + popupWidth > viewportWidth - 20) {
+          x = Math.max(20, viewportWidth - popupWidth - 20);
+        }
+        
+        // Ajustar verticalmente si es necesario
+        if (y + popupHeight > viewportHeight - 20) {
+          y = Math.max(20, rect.top - popupHeight - 10);
+        }
+      }
+      
+      setCoords({ x, y });
+    }
+  }, [isExpanded]);
+
+  // Manejador para cerrar el popup al hacer clic fuera
+  useEffect(() => {
+    if (isExpanded) {
+      const handleClickOutside = (e) => {
+        if (popupRef.current && !popupRef.current.contains(e.target) && 
+            textRef.current && !textRef.current.contains(e.target)) {
+          setIsExpanded(false);
+        }
+      };
+      
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [isExpanded]);
+
+  // Si el texto es corto, mostrarlo directamente
+  if (text.length <= maxLength) {
+    return <span className="text-green-400">{text}</span>;
+  }
+
+  return (
+    <>
+      <div className="flex items-center overflow-visible" ref={textRef}>
+        <span className="text-green-400 truncate max-w-[80%]">{text.substring(0, maxLength)}…</span>
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
+          className="ml-1 text-xs text-gray-400 hover:text-white flex-shrink-0 z-10"
+          title="Ver texto completo"
+          tabIndex={0}
+        >
+          {isExpanded ? "×" : "..."}
+        </button>
+      </div>
+
+      {isExpanded && typeof document !== 'undefined' && ReactDOM.createPortal(
+        <div 
+          ref={popupRef}
+          className="fixed bg-gray-900 border border-gray-700 p-3 rounded shadow-lg max-w-[350px] z-[99999]"
+          style={{ 
+            left: `${coords.x}px`, 
+            top: `${coords.y}px`,
+            maxHeight: '300px',
+            overflowY: 'auto',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-blue-400 font-medium text-xs">Texto completo:</span>
+            <button 
+              onClick={() => setIsExpanded(false)}
+              className="text-gray-400 hover:text-white text-xs"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="text-green-400 text-xs whitespace-pre-wrap">
+            {text}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+};
 
 // Primero definimos todos los componentes de nodos
 const ObjectNode = ({ data, id }) => {
@@ -28,9 +214,9 @@ const ObjectNode = ({ data, id }) => {
   return (
     <div className={`node-container ${collapsed ? 'collapsed-node' : ''}`}>
       <Handle type="target" position={Position.Left} className="handle-custom" />
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center mb-2">
         {data.label && (
-          <div className="text-sm text-blue-400 mb-1 font-medium flex items-center">
+          <div className="text-sm text-blue-400 font-medium flex items-center">
             {data.label}
             {hasChildren && collapsed && (
               <span className="ml-2 text-xs text-yellow-300 bg-gray-800 px-1.5 py-0.5 rounded">
@@ -45,7 +231,7 @@ const ObjectNode = ({ data, id }) => {
               e.stopPropagation();
               if (data.onToggleCollapse) data.onToggleCollapse(id);
             }}
-            className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700"
+            className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700 flex-shrink-0"
           >
             <span className="text-xs text-gray-300">{collapsed ? '+' : '−'}</span>
           </button>
@@ -53,15 +239,21 @@ const ObjectNode = ({ data, id }) => {
       </div>
       
       {/* Mostrar siempre las propiedades, independientemente del estado de colapso */}
-      {data.properties && data.properties.map((prop) => (
-        <div key={prop.key} className="flex justify-between text-xs py-1">
-          <span className="text-blue-400">{prop.key}:</span>
-          <span className="text-green-400 ml-2">{prop.value}</span>
+      {data.properties && data.properties.length > 0 && (
+        <div className="border-t border-gray-700 pt-1 node-content">
+          {data.properties.map((prop, index) => (
+            <div key={prop.key} className="flex text-xs py-1 border-b border-gray-700 last:border-b-0 overflow-visible">
+              <span className="text-blue-400 min-w-[40%] pr-2 flex-shrink-0 truncate">{prop.key}:</span>
+              <div className="flex-grow min-w-0 overflow-visible">
+                <TruncatedText text={prop.value} maxLength={12} />
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
       
       {collapsed && hasChildren && (
-        <div className="text-xs text-gray-400 py-1 flex items-center">
+        <div className="text-xs text-gray-400 py-1 flex items-center mt-1">
           <span className="w-2 h-2 bg-blue-400 rounded-full inline-block mr-2"></span>
           <span>{data.childrenCount} nodos anidados ocultos</span>
         </div>
@@ -78,8 +270,8 @@ const ArrayNode = ({ data, id }) => {
   return (
     <div className={`node-container ${collapsed ? 'collapsed-node' : ''}`}>
       <Handle type="target" position={Position.Left} className="handle-custom" />
-      <div className="flex justify-between items-center">
-        <div className="text-lg text-yellow-400 font-medium flex items-center">
+      <div className="flex justify-between items-center mb-1">
+        <div className="text-sm text-yellow-400 font-medium flex items-center">
           {data.label} [{data.length}]
           {hasChildren && collapsed && (
             <span className="ml-2 text-xs text-yellow-300 bg-gray-800 px-1.5 py-0.5 rounded">
@@ -93,7 +285,7 @@ const ArrayNode = ({ data, id }) => {
               e.stopPropagation();
               if (data.onToggleCollapse) data.onToggleCollapse(id);
             }}
-            className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700"
+            className="w-5 h-5 flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700"
           >
             <span className="text-xs text-gray-300">{collapsed ? '+' : '−'}</span>
           </button>
@@ -102,7 +294,7 @@ const ArrayNode = ({ data, id }) => {
       
       {/* Mostrar siempre las propiedades, independientemente del estado de colapso */}
       {collapsed && hasChildren && (
-        <div className="text-xs text-gray-400 py-1 flex items-center">
+        <div className="text-xs text-gray-400 py-1 flex items-center border-t border-gray-700 mt-1">
           <span className="w-2 h-2 bg-yellow-400 rounded-full inline-block mr-2"></span>
           <span>{data.childrenCount} elementos ocultos</span>
         </div>
@@ -201,12 +393,12 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
   
   // Función auxiliar para estimar el tamaño de un nodo basado en su contenido
   const estimateNodeSize = useCallback((node) => {
-    let width = 220; // Ancho base
-    let height = 60; // Altura base
+    let width = 160; // Ancho base más reducido
+    let height = 40; // Altura base más reducida
     
     // Ajuste según el modo de tamaño seleccionado
     const sizeMultiplier = nodeSizeMode === 'compact' ? 0.8 : 
-                          nodeSizeMode === 'expanded' ? 1.2 : 1;
+                          nodeSizeMode === 'expanded' ? 1.1 : 1;
     
     width *= sizeMultiplier;
     height *= sizeMultiplier;
@@ -216,41 +408,38 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       // Si es un nodo de objeto y tiene propiedades, ajustar altura
       if (node.type === 'objectNode' && node.data.properties) {
         const visibleProps = node.data.collapsed ? 0 : node.data.properties.length;
-        // Altura base + altura por cada propiedad visible
-        height += visibleProps * 22 * sizeMultiplier;
+        // Altura base + altura por cada propiedad visible (reducida)
+        height += visibleProps * 16 * sizeMultiplier; // Antes 18px
         
-        // Calcular ancho basado en las propiedades más largas
-        if (node.data.properties && node.data.properties.length > 0) {
-          const longestProp = node.data.properties.reduce((max, prop) => {
-            const length = (prop.key.length + String(prop.value).length);
-            return length > max ? length : max;
-          }, 0);
-          
-          // Ajustar ancho si hay propiedades muy largas
-          if (longestProp > 25) {
-            width += Math.min((longestProp - 25) * 4, 100) * sizeMultiplier;
-          }
+        // Limitar el número de propiedades que afectan la altura (para nodos muy grandes)
+        const maxPropsForHeight = 8;
+        if (visibleProps > maxPropsForHeight) {
+          height = height - ((visibleProps - maxPropsForHeight) * 8 * sizeMultiplier);
         }
+        
+        // Ya no calculamos el ancho basado en propiedades largas
+        // porque ahora truncamos y usamos un popup
       }
       
       // Si es un nodo de array, ajustar según si está colapsado
       if (node.type === 'arrayNode') {
         if (!node.data.collapsed && node.data.length > 0) {
-          // Si está expandido, dar más espacio
-          height += 20 * sizeMultiplier;
+          // Si está expandido, dar más espacio (reducido)
+          height += 12 * sizeMultiplier; // Antes 15px
         }
         
-        // Si el array tiene un nombre largo
-        if (node.data.label && node.data.label.length > 10) {
-          width += Math.min((node.data.label.length - 10) * 8, 80) * sizeMultiplier;
-        }
+        // Si el array tiene un nombre largo, truncarlo en lugar de hacer el nodo más grande
       }
     }
     
-    // Asegurar mínimos razonables
-    width = Math.max(width, 180 * sizeMultiplier);
-    height = Math.max(height, 40 * sizeMultiplier);
+    // Asegurar mínimos razonables (reducidos)
+    width = Math.max(width, 130 * sizeMultiplier); // Antes 150
+    height = Math.max(height, 30 * sizeMultiplier); // Antes 35
     
+    // Establecer máximos más estrictos
+    width = Math.min(width, 180 * sizeMultiplier); // Antes 220
+    height = Math.min(height, 180 * sizeMultiplier); // Antes 200
+
     return { width, height };
   }, [nodeSizeMode]);
   
