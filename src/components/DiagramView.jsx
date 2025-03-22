@@ -149,7 +149,7 @@ const CustomEdge = ({ id, source, target, sourceX, sourceY, targetX, targetY, so
   );
 };
 
-// Definir los tipos de nodos y bordes fuera del componente
+// Definir los tipos de nodos y bordes fuera del componente, pero SIN useMemo
 const NODE_TYPES = {
   objectNode: ObjectNode,
   arrayNode: ArrayNode,
@@ -160,6 +160,10 @@ const EDGE_TYPES = {
 };
 
 const DiagramView = ({ jsonData, darkMode = true }) => {
+  // Usar useMemo DENTRO del componente para memorizar los tipos
+  const nodeTypes = useMemo(() => NODE_TYPES, []);
+  const edgeTypes = useMemo(() => EDGE_TYPES, []);
+  
   const [nodes, setNodes] = useNodesState([]);
   const [edges, setEdges] = useEdgesState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -172,14 +176,14 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
   // Estado para almacenar el nodo seleccionado
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   
-  // Referencias estables para evitar problemas de dependencias circulares
-  const nodesRef = useRef(nodes);
-  const edgesRef = useRef(edges);
-  
   // Nuevos estados para la funcionalidad de búsqueda
   const [searchResults, setSearchResults] = useState([]);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // Referencias estables para evitar problemas de dependencias circulares
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
   
   useEffect(() => {
     nodesRef.current = nodes;
@@ -370,560 +374,6 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     return { nodes: layoutedNodes, edges: safeEdges };
   }, [nodeSizeMode, estimateNodeSize]);
 
-  // Función para manejar el colapso de nodos individual sin dependencias circulares
-  const handleNodeCollapse = useCallback((nodeId) => {
-    // Utilizar los refs para acceder a los valores más recientes
-    const currentEdges = edgesRef.current;
-    
-    setNodes(prevNodes => {
-      // Obtener el estado de colapso actual del nodo
-      const currentNode = prevNodes.find(node => node.id === nodeId);
-      if (!currentNode) return prevNodes;
-      
-      const newCollapsedState = !currentNode.data.collapsed;
-      
-      // Funciones para el manejo de jerarquía mejorado
-      // Función que encuentra todos los descendientes de un nodo (incluyendo todos los niveles de anidación)
-      const findAllDescendants = (rootId) => {
-        const descendants = new Set();
-        
-        // Función recursiva interna para explorar el árbol
-        const explore = (nodeId) => {
-          // Encontrar todos los hijos directos de este nodo
-          const childrenIds = currentEdges
-            .filter(edge => edge.source === nodeId)
-            .map(edge => edge.target);
-          
-          // Agregar cada hijo al conjunto de descendientes y seguir explorando recursivamente
-          childrenIds.forEach(childId => {
-            if (!descendants.has(childId)) {
-              descendants.add(childId);
-              explore(childId);
-            }
-          });
-        };
-        
-        // Iniciar exploración desde el nodo raíz
-        explore(rootId);
-        
-        return Array.from(descendants);
-      };
-      
-      // Encontrar todos los descendientes recursivamente
-      const allDescendants = findAllDescendants(nodeId);
-      
-      // Crear un conjunto para almacenar todas las aristas que deben ocultarse
-      const edgesConnections = new Set();
-      
-      // Incluir todas las aristas que conectan con descendientes
-      allDescendants.forEach(descendantId => {
-        // Encontrar todas las aristas que conectan con este descendiente (entrantes y salientes)
-        currentEdges.forEach(edge => {
-          if (edge.source === descendantId || edge.target === descendantId) {
-            edgesConnections.add(edge.id);
-          }
-        });
-      });
-      
-      // También incluir las aristas que salen directamente del nodo colapsado
-      // si está en estado colapsado
-      const directEdges = new Set();
-      currentEdges.forEach(edge => {
-        if (edge.source === nodeId) {
-          directEdges.add(edge.id);
-        }
-      });
-      
-      // Preparar actualizaciones de aristas para aplicarlas en un lote junto con los nodos
-      const updatedEdges = edgesRef.current.map(edge => {
-        const isDescendantEdge = edgesConnections.has(edge.id);
-        const isDirectEdge = directEdges.has(edge.id);
-        
-        // Si es una arista directa o de descendiente y se está colapsando
-        if ((isDescendantEdge || (isDirectEdge && !edge.isParentEdge)) && newCollapsedState) {
-          return {
-            ...edge,
-            style: {
-              ...edge.style,
-              opacity: 0,
-              visibility: 'hidden',
-              strokeWidth: 0,
-              pointerEvents: 'none',
-            },
-            hidden: true,
-            savedStyle: edge.style || {} // Guardar el estilo original
-          };
-        } 
-        // Si es una arista oculta que debemos mostrar al expandir
-        else if ((isDescendantEdge || isDirectEdge) && !newCollapsedState && edge.hidden) {
-          return {
-            ...edge,
-            style: edge.savedStyle || {
-              opacity: 1,
-              visibility: 'visible',
-              strokeWidth: 2,
-              pointerEvents: 'auto',
-            },
-            hidden: false,
-            isParentEdge: edge.source === nodeId // Marcar si es una arista del padre
-          };
-        }
-        
-        return edge;
-      });
-      
-      // Actualizar todos los nodos
-      const updatedNodes = prevNodes.map(node => {
-        // Actualizar el nodo que se está colapsando/expandiendo
-        if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              collapsed: newCollapsedState,
-              manuallyToggled: true
-            },
-            position: node.position // Mantener la posición actual
-          };
-        }
-        
-        // Ocultar/mostrar los nodos descendientes
-        if (allDescendants.includes(node.id)) {
-          if (newCollapsedState) {
-            return {
-              ...node,
-              savedStyle: node.style || {},
-              style: {
-                ...node.style,
-                opacity: 0,
-                visibility: 'hidden',
-                zIndex: -999,
-                pointerEvents: 'none',
-              },
-              hidden: true,
-              isHiddenByParent: true,
-              position: node.position // Mantener la posición actual
-            };
-          } else {
-            return {
-              ...node,
-              style: node.savedStyle || {
-                ...node.style,
-                opacity: 1,
-                visibility: 'visible',
-                zIndex: 0,
-                pointerEvents: 'auto',
-              },
-              hidden: false,
-              isHiddenByParent: false,
-              position: node.position // Mantener la posición actual
-            };
-          }
-        }
-        
-        return node;
-      });
-      
-      // Actualizar las aristas inmediatamente
-      setEdges(updatedEdges);
-      
-      return updatedNodes;
-    });
-  }, [setNodes, setEdges]);
-
-  // Referencia para la función handleNodeCollapse
-  const handleNodeCollapseRef = useRef(handleNodeCollapse);
-  useEffect(() => {
-    handleNodeCollapseRef.current = handleNodeCollapse;
-  }, [handleNodeCollapse]);
-
-  // Función para cambiar el nivel de colapso
-  const changeCollapseLevel = useCallback((level) => {
-    setLevelThreshold(level);
-    
-    const currentEdges = edgesRef.current;
-    
-    setNodes(prevNodes => {
-      // Funciones para calcular descendientes basado en el nivel y el estado de colapso
-      const findAllDescendantsOfCollapsedNodes = (nodes) => {
-        const allDescendants = new Set();
-        const nodesToProcess = nodes.filter(node => node.data && node.data.collapsed);
-        
-        // Función recursiva que explora el árbol desde un nodo colapsado
-        const explore = (nodeId) => {
-          // Encontrar todos los hijos directos
-          const childrenIds = currentEdges
-            .filter(edge => edge.source === nodeId)
-            .map(edge => edge.target);
-          
-          // Agregar cada hijo y continuar explorando recursivamente
-          childrenIds.forEach(childId => {
-            if (!allDescendants.has(childId)) {
-              allDescendants.add(childId);
-              explore(childId);
-            }
-          });
-        };
-        
-        // Explorar desde cada nodo colapsado
-        nodesToProcess.forEach(node => explore(node.id));
-        
-        return Array.from(allDescendants);
-      };
-      
-      // Primera pasada: actualizar el estado collapsed de cada nodo basado en su nivel
-      const nodesWithCollapseState = prevNodes.map(node => {
-        // Si el nodo ha sido modificado manualmente, respetar ese estado
-        if (node.data && node.data.manuallyToggled) {
-          return node;
-        }
-        
-        // De lo contrario, aplicar la regla de nivel
-        const nodeLevel = (node.id.match(/node-/g) || []).length;
-        const shouldBeCollapsed = nodeLevel > level;
-        
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            collapsed: shouldBeCollapsed
-          }
-        };
-      });
-      
-      // Segunda pasada: encontrar todos los descendientes de nodos colapsados
-      const allDescendantsToHide = findAllDescendantsOfCollapsedNodes(nodesWithCollapseState);
-      
-      // Recopilar todas las aristas que deben ocultarse
-      const edgesToHide = new Set();
-      
-      // Considerar aristas conectadas a nodos ocultos
-      allDescendantsToHide.forEach(descendantId => {
-        currentEdges.forEach(edge => {
-          if (edge.source === descendantId || edge.target === descendantId) {
-            edgesToHide.add(edge.id);
-          }
-        });
-      });
-      
-      // Considerar aristas salientes de nodos colapsados
-      nodesWithCollapseState.forEach(node => {
-        if (node.data && node.data.collapsed) {
-          currentEdges.forEach(edge => {
-            if (edge.source === node.id) {
-              edgesToHide.add(edge.id);
-            }
-          });
-        }
-      });
-      
-      // Preparar actualizaciones de aristas para aplicarlas en un lote
-      const updatedEdges = edgesRef.current.map(edge => {
-        // Verificar si esta arista debe ocultarse
-        const shouldHide = edgesToHide.has(edge.id);
-        
-        if (shouldHide) {
-          return {
-            ...edge,
-            savedStyle: edge.style || {}, // Guardar el estilo actual
-            style: {
-              ...edge.style,
-              opacity: 0,
-              visibility: 'hidden',
-              strokeWidth: 0,
-              pointerEvents: 'none',
-            },
-            hidden: true
-          };
-        } else {
-          return {
-            ...edge,
-            style: edge.savedStyle || {
-              ...edge.style,
-              opacity: 1,
-              visibility: 'visible',
-              strokeWidth: edge.style?.strokeWidth || 1.5,
-              pointerEvents: 'auto',
-            },
-            hidden: false
-          };
-        }
-      });
-      
-      // Aplicar visibilidad a los nodos según si están en la lista de ocultos
-      const finalNodes = nodesWithCollapseState.map(node => {
-        const shouldHide = allDescendantsToHide.includes(node.id);
-        
-        if (shouldHide) {
-          return {
-            ...node,
-            savedStyle: node.style || {}, // Guardar el estilo actual
-            style: {
-              ...node.style,
-              opacity: 0,
-              visibility: 'hidden',
-              zIndex: -999,
-              pointerEvents: 'none',
-            },
-            hidden: true,
-            isHiddenByParent: true
-          };
-        } else {
-          return {
-            ...node,
-            style: node.savedStyle || {
-              ...node.style,
-              opacity: 1,
-              visibility: 'visible',
-              zIndex: 0,
-              pointerEvents: 'auto',
-            },
-            hidden: false,
-            isHiddenByParent: false
-          };
-        }
-      });
-      
-      // Actualizar las aristas inmediatamente
-      setEdges(updatedEdges);
-      
-      return finalNodes;
-    });
-  }, [setNodes, setEdges]);
-
-  // Función para crear los nodos iniciales con mejor manejo de datos
-  const createNodes = useCallback((jsonData) => {
-    if (!jsonData) return { nodes: [], edges: [] };
-    
-    const nodes = [];
-    const edges = [];
-    let nodeId = 0;
-    
-    // Mapa para rastrear los hijos de cada nodo
-    const childrenMap = {};
-
-    // Función recursiva para procesar el JSON
-    const processNode = (data, parentId = null, level = 1, keyName = '') => {
-      const currentId = `node-${nodeId++}`;
-      
-      // Inicializar el contador de hijos para este nodo
-      if (!childrenMap[currentId]) {
-        childrenMap[currentId] = [];
-      }
-      
-      if (Array.isArray(data)) {
-        // Procesar array
-        nodes.push({
-          id: currentId,
-          type: 'arrayNode',
-          data: {
-            label: keyName || 'Array',
-            length: data.length,
-            collapsed: false,
-            childrenCount: 0 // Se actualizará después
-          },
-          position: { x: 0, y: 0 }
-        });
-        
-        // Procesar cada elemento del array
-        data.forEach((item, index) => {
-          if (typeof item === 'object' && item !== null) {
-            const childId = processNode(item, currentId, level + 1, `${index}`);
-            childrenMap[currentId].push(childId);
-          }
-        });
-      } else if (typeof data === 'object' && data !== null) {
-        // Extraer propiedades simples (no objetos)
-        const properties = Object.entries(data)
-          .filter(([_, value]) => typeof value !== 'object' || value === null)
-          .map(([key, value]) => ({
-            key,
-            value: value === null ? 'null' : String(value)
-          }));
-        
-        // Crear nodo para el objeto
-        nodes.push({
-          id: currentId,
-          type: 'objectNode',
-          data: {
-            label: keyName || 'Object',
-            properties,
-            collapsed: false,
-            childrenCount: 0 // Se actualizará después
-          },
-          position: { x: 0, y: 0 }
-        });
-        
-        // Procesar propiedades que son objetos
-        Object.entries(data).forEach(([key, value]) => {
-          if (typeof value === 'object' && value !== null) {
-            const childId = processNode(value, currentId, level + 1, key);
-            childrenMap[currentId].push(childId);
-          }
-        });
-      }
-      
-      // Crear conexión con el padre si existe
-      if (parentId !== null) {
-        edges.push({
-          id: `edge-${parentId}-${currentId}`,
-          source: parentId,
-          target: currentId,
-          type: 'smoothstep',
-          animated: false,
-          style: { stroke: '#4299e1', strokeWidth: 2 }
-        });
-      }
-      
-      return currentId;
-    };
-    
-    // Iniciar procesamiento desde la raíz
-    processNode(jsonData);
-    
-    // Actualizar el recuento de hijos para cada nodo
-    nodes.forEach(node => {
-      if (childrenMap[node.id]) {
-        node.data.childrenCount = childrenMap[node.id].length;
-      }
-    });
-    
-    // Añadir función de colapso mediante una referencia estable
-    const nodesWithCollapseHandler = nodes.map(node => ({
-      ...node,
-      data: {
-        ...node.data,
-        onToggleCollapse: (id) => handleNodeCollapseRef.current(id)
-      }
-    }));
-    
-    return { nodes: nodesWithCollapseHandler, edges };
-  }, []);
-
-  // Calcular la profundidad máxima del JSON cuando cambia
-  const calculateMaxDepth = useCallback((data, currentDepth = 1) => {
-    if (typeof data !== 'object' || data === null) return currentDepth;
-    
-    let maxDepth = currentDepth;
-    
-    if (Array.isArray(data)) {
-      data.forEach(item => {
-        if (typeof item === 'object' && item !== null) {
-          const depth = calculateMaxDepth(item, currentDepth + 1);
-          maxDepth = Math.max(maxDepth, depth);
-        }
-      });
-    } else {
-      Object.values(data).forEach(value => {
-        if (typeof value === 'object' && value !== null) {
-          const depth = calculateMaxDepth(value, currentDepth + 1);
-          maxDepth = Math.max(maxDepth, depth);
-        }
-      });
-    }
-    
-    return maxDepth;
-  }, []);
-  
-  const [maxDepth, setMaxDepth] = useState(1);
-  
-  // Actualizar la profundidad máxima cuando cambia el JSON
-  useEffect(() => {
-    if (jsonData) {
-      const depth = calculateMaxDepth(jsonData);
-      setMaxDepth(depth);
-    }
-  }, [jsonData, calculateMaxDepth]);
-
-  // Referencia a la función getLayoutedElements
-  const getLayoutedElementsRef = useRef(getLayoutedElements);
-  useEffect(() => {
-    getLayoutedElementsRef.current = getLayoutedElements;
-  }, [getLayoutedElements]);
-
-  // Referencia al estado de layoutDirection
-  const layoutDirectionRef = useRef(layoutDirection);
-  useEffect(() => {
-    layoutDirectionRef.current = layoutDirection;
-  }, [layoutDirection]);
-
-  // Referencia a la función createNodes
-  const createNodesRef = useRef(createNodes);
-  useEffect(() => {
-    createNodesRef.current = createNodes;
-  }, [createNodes]);
-  
-  // Efecto para activar el recálculo automático del layout cuando hay cambios en los nodos
-  useEffect(() => {
-    // Activar el botón de recálculo de layout solo si hay cambios importantes
-    // como colapsos, expansiones o cambios de dirección
-    if (nodes.length > 0) {
-      const autoLayoutBtn = document.getElementById('auto-layout-btn');
-      if (autoLayoutBtn) {
-        setTimeout(() => {
-          autoLayoutBtn.click();
-        }, 100);
-      }
-    }
-  }, [levelThreshold, layoutDirection, nodeSizeMode]);
-  
-  // Efecto adicional para recalcular cuando se colapsan/expanden nodos manualmente
-  useEffect(() => {
-    const collapsedStateChanged = nodes.some(node => node.data && node.data.manuallyToggled);
-    
-    if (collapsedStateChanged) {
-      // Eliminar este setTimeout que fuerza el reajuste
-      /*
-      const autoLayoutBtn = document.getElementById('auto-layout-btn');
-      if (autoLayoutBtn) {
-        setTimeout(() => {
-          autoLayoutBtn.click();
-        }, 150);
-      }
-      */
-    }
-  }, [nodes]);
-
-  // Actualizar los nodos cuando cambia el JSON evitando dependencias circulares
-  useEffect(() => {
-    if (!jsonData) return;
-    
-    const { nodes: initialNodes, edges: initialEdges } = createNodesRef.current(jsonData);
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElementsRef.current(
-      initialNodes,
-      initialEdges,
-      layoutDirectionRef.current
-    );
-    
-    // Inicializar con todos los nodos expandidos al cargar
-    const expandedNodes = layoutedNodes.map(node => ({
-      ...node,
-      data: {
-        ...node.data,
-        collapsed: false
-      },
-      hidden: false,
-      style: {
-        ...node.style,
-        opacity: 1,
-        visibility: 'visible',
-        zIndex: 0
-      }
-    }));
-    
-    setLevelThreshold(999); // Establecer nivel a máximo para mostrar todo inicialmente
-    setNodes(expandedNodes);
-    setEdges(layoutedEdges);
-    
-    // Recalcular layout después de la carga inicial
-    setTimeout(() => {
-      const autoLayoutBtn = document.getElementById('auto-layout-btn');
-      if (autoLayoutBtn) {
-        autoLayoutBtn.click();
-      }
-    }, 200);
-  }, [jsonData, setNodes, setEdges]);
-
   // Función para manejar la selección de nodos y resaltar conexiones
   const onNodeClick = useCallback((event, node) => {
     if (!node || !node.id) return;
@@ -966,8 +416,8 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         }
         
         // Para las demás conexiones, quitar el resaltado
-        return {
-          ...edge,
+          return {
+            ...edge,
           className: edge.className?.replace('edge-highlight', '') || '',
           animated: false
         };
@@ -1001,12 +451,12 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         // Si es un nodo conectado, resaltarlo
         if (isConnectedNode || n.id === nodeId) {
           const existingClass = n.className || '';
-          return {
+            return {
             ...n,
             className: existingClass.includes('node-highlight') 
               ? existingClass 
               : `${existingClass} node-highlight`,
-            style: {
+              style: {
               ...n.style,
               zIndex: 10 // Traer al frente los nodos resaltados
             }
@@ -1041,7 +491,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       });
       
       // Quitar resaltado de todos los nodos
-      setNodes(prevNodes => {
+    setNodes(prevNodes => {
         return prevNodes.map(node => ({
           ...node,
           className: node.className?.replace('node-highlight', '') || '',
@@ -1053,51 +503,6 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       });
     }
   }, [selectedNodeId, setEdges, setNodes]);
-
-  // Optimizar la función recalculateLayout con mejores parámetros de fitView
-  const recalculateLayout = useCallback(() => {
-    if (reactFlowInstance) {
-      try {
-        document.body.classList.add('viewport-transforming');
-        
-        const { nodes: newNodes, edges: newEdges } = getLayoutedElements(
-          nodesRef.current,
-          edgesRef.current,
-          layoutDirection
-        );
-        
-        setNodes(newNodes);
-        setEdges(newEdges);
-        
-        // Usar un fitView más ajustado
-        setTimeout(() => {
-          if (reactFlowInstance) {
-            reactFlowInstance.fitView({
-              padding: 0.05, // Reducido de 0.1
-              includeHiddenNodes: false,
-              duration: 100,
-              maxZoom: 1.8 // Aumentado para permitir más zoom
-            });
-            
-            // Quitar la clase de transformación más rápido
-            setTimeout(() => {
-              document.body.classList.remove('viewport-transforming');
-            }, 100);
-          }
-        }, 10);
-        
-      } catch (error) {
-        console.warn("Error en el recálculo del layout:", error);
-        document.body.classList.remove('viewport-transforming');
-      }
-    }
-  }, [getLayoutedElements, reactFlowInstance, layoutDirection, setNodes, setEdges]);
-
-  // Reemplazar el panel de auto-layout con esta función
-  const autoLayoutRef = useRef(recalculateLayout);
-  useEffect(() => {
-    autoLayoutRef.current = recalculateLayout;
-  }, [recalculateLayout]);
 
   // Función optimizada para controlar el fitView directamente
   const handleFitView = useCallback(() => {
@@ -1130,7 +535,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
             document.body.classList.remove('viewport-transforming');
             setNodes(prevNodes => 
               prevNodes.map(node => ({
-                ...node,
+          ...node,
                 style: {
                   ...node.style,
                   transition: null
@@ -1224,10 +629,10 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       
       setEdges(prevEdges => 
         prevEdges.map(edge => ({
-          ...edge,
+            ...edge,
           className: edge.className?.replace('dragging-edge', '') || '',
-          style: {
-            ...edge.style,
+            style: {
+              ...edge.style,
             transition: null,
             strokeDasharray: null
           }
@@ -1257,9 +662,9 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       setIsSearching(false);
       
       setNodes(prevNodes => prevNodes.map(node => ({
-        ...node,
-        style: {
-          ...node.style,
+            ...node,
+            style: {
+              ...node.style,
           opacity: 1,
           filter: 'none',
           boxShadow: 'none',
@@ -1310,10 +715,10 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     setNodes(prevNodes => prevNodes.map(node => {
       const isHighlighted = nodesToHighlight.has(node.id);
       
-      return {
-        ...node,
+          return {
+            ...node,
         style: {
-          ...node.style,
+              ...node.style,
           opacity: isHighlighted ? 1 : 0.15,
           filter: isHighlighted ? 'none' : 'grayscale(0.8) blur(0.8px)',
           boxShadow: isHighlighted 
@@ -1437,6 +842,549 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     );
   }, [setNodes]);
 
+  // Añadir la función createNodes que falta
+  const createNodes = useCallback((jsonData) => {
+    if (!jsonData) return { nodes: [], edges: [] };
+    
+    const nodes = [];
+    const edges = [];
+    let nodeId = 0;
+    
+    // Mapa para rastrear los hijos de cada nodo
+    const childrenMap = {};
+
+    // Función recursiva para procesar el JSON
+    const processNode = (data, parentId = null, level = 1, keyName = '') => {
+      const currentId = `node-${nodeId++}`;
+      
+      // Inicializar el contador de hijos para este nodo
+      if (!childrenMap[currentId]) {
+        childrenMap[currentId] = [];
+      }
+      
+      if (Array.isArray(data)) {
+        // Procesar array
+        nodes.push({
+          id: currentId,
+          type: 'arrayNode',
+          data: {
+            label: keyName || 'Array',
+            length: data.length,
+            collapsed: false,
+            childrenCount: 0 // Se actualizará después
+          },
+          position: { x: 0, y: 0 }
+        });
+        
+        // Procesar cada elemento del array
+        data.forEach((item, index) => {
+          if (typeof item === 'object' && item !== null) {
+            const childId = processNode(item, currentId, level + 1, `${index}`);
+            childrenMap[currentId].push(childId);
+          }
+        });
+      } else if (typeof data === 'object' && data !== null) {
+        // Extraer propiedades simples (no objetos)
+        const properties = Object.entries(data)
+          .filter(([_, value]) => typeof value !== 'object' || value === null)
+          .map(([key, value]) => ({
+            key,
+            value: value === null ? 'null' : String(value)
+          }));
+        
+        // Crear nodo para el objeto
+        nodes.push({
+          id: currentId,
+          type: 'objectNode',
+          data: {
+            label: keyName || 'Object',
+            properties,
+            collapsed: false,
+            childrenCount: 0 // Se actualizará después
+          },
+          position: { x: 0, y: 0 }
+        });
+        
+        // Procesar propiedades que son objetos
+        Object.entries(data).forEach(([key, value]) => {
+          if (typeof value === 'object' && value !== null) {
+            const childId = processNode(value, currentId, level + 1, key);
+            childrenMap[currentId].push(childId);
+          }
+        });
+      }
+      
+      // Crear conexión con el padre si existe
+      if (parentId !== null) {
+        edges.push({
+          id: `edge-${parentId}-${currentId}`,
+          source: parentId,
+          target: currentId,
+          type: 'smoothstep',
+          animated: false,
+          style: { stroke: '#4299e1', strokeWidth: 2 }
+        });
+      }
+      
+      return currentId;
+    };
+    
+    // Iniciar procesamiento desde la raíz
+    processNode(jsonData);
+    
+    // Actualizar el recuento de hijos para cada nodo
+    nodes.forEach(node => {
+      if (childrenMap[node.id]) {
+        node.data.childrenCount = childrenMap[node.id].length;
+      }
+    });
+    
+    // Añadir función de colapso mediante una referencia estable
+    const nodesWithCollapseHandler = nodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        onToggleCollapse: (id) => handleNodeCollapse(id)
+      }
+    }));
+    
+    return { nodes: nodesWithCollapseHandler, edges };
+  }, []); // Dependencia vacía ya que handleNodeCollapse no está definido aún
+
+  // Añadir la función handleNodeCollapse que se usa en createNodes
+  const handleNodeCollapse = useCallback((nodeId) => {
+    setNodes(prevNodes => {
+      // Obtener el estado de colapso actual del nodo
+      const currentNode = prevNodes.find(node => node.id === nodeId);
+      if (!currentNode) return prevNodes;
+      
+      const newCollapsedState = !currentNode.data.collapsed;
+      
+      // Funciones para el manejo de jerarquía
+      const findAllDescendants = (rootId) => {
+        const descendants = new Set();
+        const currentEdges = edgesRef.current;
+        
+        // Función recursiva para explorar el árbol
+        const explore = (nodeId) => {
+          // Encontrar hijos directos
+          const childrenIds = currentEdges
+            .filter(edge => edge.source === nodeId)
+            .map(edge => edge.target);
+          
+          // Agregar hijos y seguir explorando
+          childrenIds.forEach(childId => {
+            if (!descendants.has(childId)) {
+              descendants.add(childId);
+              explore(childId);
+            }
+          });
+        };
+        
+        explore(rootId);
+        return Array.from(descendants);
+      };
+      
+      // Encontrar descendientes
+      const allDescendants = findAllDescendants(nodeId);
+      
+      // Actualizar los nodos
+      const updatedNodes = prevNodes.map(node => {
+        // El nodo que estamos colapsando/expandiendo
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              collapsed: newCollapsedState,
+              manuallyToggled: true
+            }
+          };
+        }
+        
+        // Nodos descendientes
+        if (allDescendants.includes(node.id)) {
+          if (newCollapsedState) {
+            return {
+              ...node,
+              hidden: true,
+              style: {
+                ...node.style,
+                opacity: 0,
+                visibility: 'hidden',
+                zIndex: -999
+              }
+            };
+          } else {
+            return {
+      ...node,
+      hidden: false,
+      style: {
+        ...node.style,
+        opacity: 1,
+        visibility: 'visible',
+        zIndex: 0
+      }
+            };
+          }
+        }
+        
+        return node;
+      });
+      
+      // También necesitamos actualizar aristas
+      const currentEdges = edgesRef.current;
+      setEdges(prevEdges => 
+        prevEdges.map(edge => {
+          const sourceHidden = allDescendants.includes(edge.source);
+          const targetHidden = allDescendants.includes(edge.target);
+          const shouldHide = sourceHidden || targetHidden || 
+                           (edge.source === nodeId && newCollapsedState);
+          
+          if (shouldHide) {
+          return {
+              ...edge,
+              hidden: true,
+            style: {
+                ...edge.style,
+                opacity: 0,
+                visibility: 'hidden',
+                strokeWidth: 0
+              }
+            };
+          }
+          
+          return {
+            ...edge,
+            hidden: false,
+            style: {
+              ...edge.style,
+              opacity: 1,
+              visibility: 'visible',
+              strokeWidth: edge.style?.strokeWidth || 1.5
+            }
+          };
+        })
+      );
+      
+      return updatedNodes;
+    });
+  }, [setNodes, setEdges]);
+
+  // Crear referencia para autoLayout
+  const autoLayoutRef = useRef(null);
+
+  // Definir recalculateLayout antes de usarlo en otros lugares
+  const recalculateLayout = useCallback(() => {
+    if (!reactFlowInstance) return;
+    
+    try {
+      document.body.classList.add('viewport-transforming');
+      
+      const { nodes: newNodes, edges: newEdges } = getLayoutedElements(
+        nodesRef.current,
+        edgesRef.current,
+        layoutDirection
+      );
+      
+      // Asegurar que los nodos mantienen su estado visible/colapsado
+      const updatedNodes = newNodes.map(newNode => {
+        const existingNode = nodesRef.current.find(n => n.id === newNode.id);
+        if (!existingNode) return newNode;
+        
+        return {
+          ...newNode,
+          data: {
+            ...newNode.data,
+            collapsed: existingNode.data?.collapsed || false
+          },
+          hidden: existingNode.hidden || false,
+          style: {
+            ...newNode.style,
+            opacity: existingNode.hidden ? 0 : 1,
+            visibility: existingNode.hidden ? 'hidden' : 'visible'
+          }
+        };
+      });
+      
+      setNodes(updatedNodes);
+      setEdges(newEdges);
+      
+      // Usar un fitView más rápido
+      setTimeout(() => {
+        if (reactFlowInstance) {
+          reactFlowInstance.fitView({
+            padding: 0.05,
+            includeHiddenNodes: false,
+            duration: 200,
+            maxZoom: 1.5
+          });
+          
+          setTimeout(() => {
+            document.body.classList.remove('viewport-transforming');
+          }, 100);
+        }
+      }, 10);
+      
+    } catch (error) {
+      console.warn("Error en el recálculo del layout:", error);
+      document.body.classList.remove('viewport-transforming');
+    }
+  }, [getLayoutedElements, reactFlowInstance, layoutDirection, setNodes, setEdges]);
+
+  // Asegurar que autoLayoutRef se actualiza
+  useEffect(() => {
+    autoLayoutRef.current = recalculateLayout;
+  }, [recalculateLayout]);
+
+  // Ahora puedes usar recalculateLayout en el useEffect que carga los datos iniciales
+  useEffect(() => {
+    if (!jsonData) return;
+    
+    const { nodes: initialNodes, edges: initialEdges } = createNodes(jsonData);
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+      initialNodes,
+      initialEdges,
+      layoutDirection
+    );
+    
+    // Inicializar con todos los nodos expandidos al cargar
+    const expandedNodes = layoutedNodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        collapsed: false
+      },
+      hidden: false,
+      style: {
+        ...node.style,
+        opacity: 1,
+        visibility: 'visible',
+        zIndex: 0
+      }
+    }));
+    
+    setLevelThreshold(999);
+    setNodes(expandedNodes);
+    setEdges(layoutedEdges);
+    
+    // Recalcular layout después de la carga inicial
+    setTimeout(() => {
+      if (autoLayoutRef.current) {
+        autoLayoutRef.current();
+      }
+    }, 300);
+  }, [jsonData, setNodes, setEdges, createNodes, getLayoutedElements, layoutDirection]);
+
+  // 4. Implementar funciones mejoradas para colapsar/expandir todos los nodos
+  const collapseAllNodes = useCallback(() => {
+    setNodes(prevNodes => {
+      // Primero identificar todos los nodos que tienen hijos
+      const nodesWithChildren = prevNodes.filter(node => 
+        node.data && node.data.childrenCount > 0
+      );
+      
+      // Colapsar esos nodos
+      const updatedNodes = prevNodes.map(node => {
+        if (node.data && node.data.childrenCount > 0) {
+          return {
+          ...node,
+            data: {
+              ...node.data,
+              collapsed: true,
+              manuallyToggled: true
+            }
+          };
+        }
+        return node;
+      });
+      
+      // Ahora necesitamos ocultar los descendientes de los nodos colapsados
+      // Referencia segura a las aristas actuales
+      const currentEdges = edgesRef.current;
+      
+      // Encuentra todos los descendientes de nodos colapsados
+      const findDescendants = (nodeId, descendants = new Set()) => {
+        const childEdges = currentEdges.filter(edge => edge.source === nodeId);
+        
+        childEdges.forEach(edge => {
+          const childId = edge.target;
+          if (!descendants.has(childId)) {
+            descendants.add(childId);
+            findDescendants(childId, descendants);
+          }
+        });
+        
+        return descendants;
+      };
+      
+      // Coleccionar todos los descendientes
+      const nodesToHide = new Set();
+      nodesWithChildren.forEach(node => {
+        const descendants = findDescendants(node.id);
+        descendants.forEach(id => nodesToHide.add(id));
+      });
+      
+      // Ocultar los descendientes
+      const finalNodes = updatedNodes.map(node => {
+        if (nodesToHide.has(node.id)) {
+          return {
+                ...node,
+            hidden: true,
+                style: {
+                  ...node.style,
+              opacity: 0,
+              visibility: 'hidden',
+              zIndex: -999
+            }
+          };
+        }
+        return node;
+      });
+      
+      // Actualizar también las aristas relacionadas
+      const edgesToHide = new Set();
+      currentEdges.forEach(edge => {
+        if (nodesToHide.has(edge.source) || nodesToHide.has(edge.target)) {
+          edgesToHide.add(edge.id);
+        }
+      });
+      
+          setEdges(prevEdges => 
+        prevEdges.map(edge => {
+          if (edgesToHide.has(edge.id)) {
+            return {
+                ...edge,
+              hidden: true,
+                style: {
+                  ...edge.style,
+                opacity: 0,
+                visibility: 'hidden',
+                strokeWidth: 0
+              }
+            };
+          }
+          return edge;
+        })
+      );
+      
+      return finalNodes;
+    });
+    
+    // Recalcular layout después de colapsar
+    setTimeout(() => {
+      if (autoLayoutRef.current) {
+        autoLayoutRef.current();
+      }
+    }, 100);
+  }, [setNodes, setEdges]);
+
+  const expandAllNodes = useCallback(() => {
+    // Expandir todos los nodos y hacerlos visibles
+      setNodes(prevNodes => 
+      prevNodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          collapsed: false,
+          manuallyToggled: true
+        },
+        hidden: false,
+            style: {
+          ...node.style,
+          opacity: 1,
+          visibility: 'visible',
+          zIndex: node.style?.zIndex || 0
+        }
+      }))
+    );
+    
+    // Mostrar todas las aristas
+      setEdges(prevEdges => 
+        prevEdges.map(edge => ({
+          ...edge,
+        hidden: false,
+          style: {
+            ...edge.style,
+          opacity: 1,
+          visibility: 'visible',
+          strokeWidth: edge.style?.strokeWidth || 1.5
+          }
+        }))
+      );
+    
+    // Recalcular layout después de expandir
+    setTimeout(() => {
+      if (autoLayoutRef.current) {
+        autoLayoutRef.current();
+      }
+    }, 100);
+  }, [setNodes, setEdges]);
+
+  // Opcional: Si quieres crear una versión mejorada, hazlo después de la definición original
+  const enhancedRecalculateLayout = useCallback(() => {
+    if (!reactFlowInstance) return;
+    
+    try {
+      document.body.classList.add('viewport-transforming');
+      
+      const { nodes: newNodes, edges: newEdges } = getLayoutedElements(
+        nodesRef.current,
+        edgesRef.current,
+        layoutDirection
+      );
+      
+      // Preservar estados de colapso y visibilidad
+      const updatedNodes = newNodes.map(newNode => {
+        const existingNode = nodesRef.current.find(n => n.id === newNode.id);
+        if (!existingNode) return newNode;
+        
+        return {
+          ...newNode,
+          data: {
+            ...newNode.data,
+            collapsed: existingNode.data?.collapsed || false,
+            manuallyToggled: existingNode.data?.manuallyToggled || false
+          },
+          hidden: existingNode.hidden || false,
+          style: {
+            ...newNode.style,
+            opacity: existingNode.hidden ? 0 : 1,
+            visibility: existingNode.hidden ? 'hidden' : 'visible'
+          }
+        };
+      });
+      
+      setNodes(updatedNodes);
+      setEdges(newEdges);
+      
+      // FitView mejorado
+      setTimeout(() => {
+        if (reactFlowInstance) {
+          reactFlowInstance.fitView({
+            padding: 0.05,
+            includeHiddenNodes: false,
+            duration: 200,
+            maxZoom: 1.5
+          });
+          
+          setTimeout(() => {
+            document.body.classList.remove('viewport-transforming');
+          }, 100);
+        }
+      }, 10);
+      
+    } catch (error) {
+      console.warn("Error en el recálculo del layout:", error);
+      document.body.classList.remove('viewport-transforming');
+    }
+  }, [getLayoutedElements, reactFlowInstance, layoutDirection, setNodes, setEdges]);
+
+  // Si decides usar el enhancedRecalculateLayout, actualiza también la referencia
+  useEffect(() => {
+    autoLayoutRef.current = enhancedRecalculateLayout;
+  }, [enhancedRecalculateLayout]);
+
   return (
     <div className={`h-full w-full ${darkMode ? 'bg-black' : 'bg-gray-100'} relative`} ref={reactFlowWrapper}>
       {/* Barra de búsqueda mejorada con controles de navegación */}
@@ -1480,8 +1428,8 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
               </button>
             </div>
           )}
-        </div>
-        
+      </div>
+      
         {/* Indicador de resultados y botón de limpiar */}
         {searchResults.length > 0 && (
           <div className="flex items-center gap-2 bg-gray-800 bg-opacity-70 rounded-md px-2 py-1 text-xs text-gray-300">
@@ -1505,7 +1453,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         )}
       </div>
       
-      {/* Panel principal de controles - reorganizado para evitar superposiciones */}
+      {/* Panel principal de controles - simplificado */}
       <div className="absolute top-2 right-2 z-20 tools-panel flex flex-wrap gap-2">
         <div className="flex gap-2">
           <button 
@@ -1530,24 +1478,12 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
           </button>
         </div>
         
-        {/* Segunda fila de controles para evitar superposiciones */}
+        {/* Segunda fila para el selector de tamaño */}
         <div className="flex gap-2 w-full">
-          {/* Control para nivel de profundidad */}
-          <div className="range-control">
-            <span>Nivel: {levelThreshold}</span>
-            <input 
-              type="range" 
-              min="1" 
-              max={Math.max(10, maxDepth)} 
-              value={levelThreshold}
-              onChange={(e) => changeCollapseLevel(parseInt(e.target.value))}
-            />
-          </div>
-          
           <select 
             onChange={(e) => setNodeSizeMode(e.target.value)}
             value={nodeSizeMode}
-            className="size-selector"
+            className="size-selector w-full"
           >
             <option value="compact">Compacto</option>
             <option value="medium">Mediano</option>
@@ -1555,30 +1491,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
           </select>
         </div>
         
-        {/* Tercera fila para botones de colapso/expansión */}
-        <div className="flex gap-2 w-full">
-          <button 
-            onClick={() => changeCollapseLevel(0)}
-            className="control-button collapse-button"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            Colapsar Todo
-          </button>
-          <button 
-            onClick={() => changeCollapseLevel(999)}
-            className="control-button expand-button"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            Expandir Todo
-          </button>
-        </div>
-        
-        {/* Cuarta fila para botón de reorganización */}
+        {/* Botón de reorganización */}
         <div className="flex w-full">
           <button 
             onClick={() => {
@@ -1601,32 +1514,50 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
             </svg>
             Reorganizar
           </button>
-        </div>
       </div>
       
-      {/* Indicador de nodos ocultos */}
-      <div className="react-flow__viewport-info">
-        Profundidad máxima: {maxDepth} | Mostrando hasta nivel: {levelThreshold}
+        {/* Botones para expandir/colapsar todo nodos - actualizados */}
+        <div className="flex gap-2 w-full">
+          <button 
+            onClick={collapseAllNodes}
+            className="control-button collapse-button w-1/2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Colapsar Todo
+          </button>
+          <button 
+            onClick={expandAllNodes}
+            className="control-button expand-button w-1/2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Expandir Todo
+          </button>
+        </div>
       </div>
       
       {/* ReactFlow con configuración optimizada */}
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        nodeTypes={NODE_TYPES}
-        edgeTypes={EDGE_TYPES}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={null}
         onInit={setReactFlowInstance}
         fitView
         fitViewOptions={{ 
-          padding: 0.05, // Reducido para un zoom más cercano
+          padding: 0.05, 
           includeHiddenNodes: true,
           duration: 300,
-          maxZoom: 1.8 // Aumentado para permitir más zoom
+          maxZoom: 1.8
         }}
         minZoom={0.1}
-        maxZoom={2.5} // Aumentado para permitir más zoom
+        maxZoom={2.5}
         proOptions={{ 
           hideAttribution: true
         }}
@@ -1640,7 +1571,6 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         zoomOnScroll={true}
         preventScrolling={true}
         selectionOnDrag={false}
-        panOnDragType="free"
         className="animate-layout-transition"
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
