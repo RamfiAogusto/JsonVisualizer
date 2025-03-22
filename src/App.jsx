@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import JsonEditor from './components/JsonEditor';
-import DiagramView from './components/DiagramView';
+import DiagramView from './components/DiagramView/index';
 import StatsBar from './components/StatsBar';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import './App.css';
