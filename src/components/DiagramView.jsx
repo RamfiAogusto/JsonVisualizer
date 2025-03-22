@@ -176,6 +176,11 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   
+  // Nuevos estados para la funcionalidad de búsqueda
+  const [searchResults, setSearchResults] = useState([]);
+  const [currentResultIndex, setCurrentResultIndex] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
+  
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -257,55 +262,53 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     const dagreGraph = new dagre.graphlib.Graph();
     dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-    // Ajustes mejorados para el espaciado basado en el modo seleccionado
-    let baseSep = nodeSizeMode === 'compact' ? 40 : 
-                 nodeSizeMode === 'expanded' ? 80 : 60;
+    // AJUSTE 1: Reducir significativamente los valores base de separación
+    let baseSep = nodeSizeMode === 'compact' ? 20 : 
+                 nodeSizeMode === 'expanded' ? 40 : 30;
     
-    // Ajustar espaciado basado en cantidad de nodos (espaciado progresivo)
-    let nodeSepFactor = 1.0;
-    let rankSepFactor = 1.0;
+    // AJUSTE 2: Reducir los factores de separación
+    let nodeSepFactor = 0.8;
+    let rankSepFactor = 0.8;
     
-    // Para gráficos con pocos nodos, dar más espacio
+    // Para gráficos con pocos nodos, dar espacio moderado
     if (safeNodes.length < 20) {
-      nodeSepFactor = 1.5;
-      rankSepFactor = 1.5;
+      nodeSepFactor = 1.0;
+      rankSepFactor = 1.0;
     } else if (safeNodes.length > 100) {
-      // Para gráficos muy grandes, optimizar el espacio
-      nodeSepFactor = 0.8;
-      rankSepFactor = 0.8;
+      // Para gráficos muy grandes, optimizar aún más el espacio
+      nodeSepFactor = 0.6;
+      rankSepFactor = 0.6;
     }
     
     // Aplicar factores de espaciado según dirección
-    const nodesep = baseSep * (direction === 'LR' ? 1.2 : 1.0) * nodeSepFactor;
-    const ranksep = baseSep * (direction === 'TB' ? 1.2 : 1.0) * rankSepFactor;
+    const nodesep = baseSep * (direction === 'LR' ? 1.0 : 0.8) * nodeSepFactor;
+    const ranksep = baseSep * (direction === 'TB' ? 1.0 : 0.8) * rankSepFactor;
     
-    // Configuración mejorada del grafo para evitar superposiciones
+    // AJUSTE 3: Configuración mejorada del grafo para layout más compacto
     dagreGraph.setGraph({ 
       rankdir: direction,
       ranksep,
       nodesep,
-      marginx: 50,
-      marginy: 50,
+      marginx: 20, // Reducir márgenes
+      marginy: 20, // Reducir márgenes
       align: direction === 'LR' ? 'UL' : 'DL',
-      ranker: 'tight-tree', // Usar un algoritmo optimizado para árboles
+      ranker: 'network-simplex', // Cambiar a un algoritmo que favorece la compactación
       acyclicer: 'greedy',
-      // Utilizar separación forzada para evitar superposiciones
-      edgesep: baseSep * 0.4,
-      // Preferir layout más compacto pero sin superposiciones
+      // Utilizar separación forzada pero más compacta
+      edgesep: baseSep * 0.2,
+      // Preferir layout más compacto
       rankSep: ranksep,
-      // Maximizar la utilización del espacio
-      nestingRoot: null,
-      // Aplicar fuerza de antisolapamiento
-      gravity: 0.3,
+      // AJUSTE 4: Aumentar la gravedad para atraer nodos entre sí
+      gravity: 0.8,
     });
 
-    // Añadir nodos al grafo con tamaños precisos
+    // AJUSTE 5: Reducir los márgenes de seguridad en los nodos
     safeNodes.forEach((node) => {
       try {
-        // Obtener dimensiones precisas con margen adicional para prevenir solapamientos
+        // Obtener dimensiones precisas con margen adicional reducido
         const { width, height } = estimateNodeSize(node);
-        // Añadir margen de seguridad para evitar superposiciones
-        const safetyMargin = 15;
+        // Reducir el margen de seguridad
+        const safetyMargin = 5; // Reducido de 15
         
         dagreGraph.setNode(node.id, { 
           width: width + safetyMargin, 
@@ -314,7 +317,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       } catch (error) {
         console.warn(`Error procesando nodo ${node.id}:`, error);
         // Usar tamaño predeterminado con margen si hay error
-        dagreGraph.setNode(node.id, { width: 220, height: 65 });
+        dagreGraph.setNode(node.id, { width: 180, height: 50 });
       }
     });
 
@@ -1051,7 +1054,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     }
   }, [selectedNodeId, setEdges, setNodes]);
 
-  // Optimizar la función recalculateLayout
+  // Optimizar la función recalculateLayout con mejores parámetros de fitView
   const recalculateLayout = useCallback(() => {
     if (reactFlowInstance) {
       try {
@@ -1066,14 +1069,14 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         setNodes(newNodes);
         setEdges(newEdges);
         
-        // Usar un fitView más rápido y mantener la interactividad
+        // Usar un fitView más ajustado
         setTimeout(() => {
           if (reactFlowInstance) {
             reactFlowInstance.fitView({
-              padding: 0.1,
+              padding: 0.05, // Reducido de 0.1
               includeHiddenNodes: false,
               duration: 100,
-              maxZoom: 1.5
+              maxZoom: 1.8 // Aumentado para permitir más zoom
             });
             
             // Quitar la clase de transformación más rápido
@@ -1116,10 +1119,10 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
       requestAnimationFrame(() => {
         try {
           reactFlowInstance.fitView({
-            padding: 0.1,
+            padding: 0.05, // Reducido para un zoom más cercano
             includeHiddenNodes: false,
             duration: 150,
-            maxZoom: 1.5
+            maxZoom: 1.8 // Aumentado para permitir más zoom
           });
           
           // Restaurar después de que termine la transformación
@@ -1245,11 +1248,261 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     setNodes(nodes => applyNodeChanges(filteredChanges, nodes));
   }, [setNodes]);
 
+  // Reemplazar la función de filtrado y los efectos relacionados con la búsqueda
+  const filterNodesBySearchTerm = useCallback((searchText) => {
+    if (!searchText || searchText.trim() === '') {
+      // Resetear todos los nodos a estado normal
+      setSearchResults([]);
+      setCurrentResultIndex(0);
+      setIsSearching(false);
+      
+      setNodes(prevNodes => prevNodes.map(node => ({
+        ...node,
+        style: {
+          ...node.style,
+          opacity: 1,
+          filter: 'none',
+          boxShadow: 'none',
+          zIndex: node.style?.zIndex || 0
+        },
+        highlighted: false
+      })));
+      
+      return;
+    }
+
+    setIsSearching(true);
+    const term = searchText.toLowerCase();
+    const results = [];
+    
+    // Primero recolectar los resultados sin modificar los nodos
+    const nodesToHighlight = new Set();
+    
+    // Buscar coincidencias
+    nodes.forEach(node => {
+      // Verificar coincidencias en la etiqueta del nodo
+      const labelMatch = node.data.label?.toLowerCase().includes(term);
+      
+      // Verificar coincidencias en las propiedades
+      const propMatches = node.data.properties?.filter(prop => 
+        prop.key.toLowerCase().includes(term) || 
+        prop.value.toLowerCase().includes(term)
+      ) || [];
+      
+      const matches = labelMatch || propMatches.length > 0;
+      
+      if (matches) {
+        results.push({
+          id: node.id,
+          labelMatch,
+          propMatches: propMatches.map(p => ({key: p.key, value: p.value}))
+        });
+        
+        nodesToHighlight.add(node.id);
+      }
+    });
+    
+    // Actualizar los resultados de búsqueda
+    setSearchResults(results);
+    setCurrentResultIndex(results.length > 0 ? 0 : -1);
+    
+    // Después, aplicar los cambios visuales a los nodos en una sola actualización
+    setNodes(prevNodes => prevNodes.map(node => {
+      const isHighlighted = nodesToHighlight.has(node.id);
+      
+      return {
+        ...node,
+        style: {
+          ...node.style,
+          opacity: isHighlighted ? 1 : 0.15,
+          filter: isHighlighted ? 'none' : 'grayscale(0.8) blur(0.8px)',
+          boxShadow: isHighlighted 
+            ? '0 0 0 2px #fbbf24, 0 0 10px rgba(251, 191, 36, 0.6)' 
+            : 'none',
+          zIndex: isHighlighted ? 50 : node.style?.zIndex || 0,
+        },
+        highlighted: isHighlighted
+      };
+    }));
+    
+    // Aplicar focus al primer resultado después de aplicar los estilos
+    if (results.length > 0 && reactFlowInstance) {
+      setTimeout(() => {
+        focusOnNode(results[0].id);
+      }, 100);
+    }
+  }, [nodes, reactFlowInstance]);
+
+  // Reemplazar el useEffect de búsqueda con un handler para SearchBar
+  const handleSearch = useCallback((searchText) => {
+    setSearchTerm(searchText);
+    
+    // Usar debounce para evitar demasiadas actualizaciones
+    const debouncedSearch = debounce(() => {
+      filterNodesBySearchTerm(searchText);
+    }, 300);
+    
+    debouncedSearch();
+    
+    return () => debouncedSearch.cancel();
+  }, [filterNodesBySearchTerm]);
+
+  // Actualizar la función focusOnNode para evitar más bucles
+  const focusOnNode = useCallback((nodeId) => {
+    if (!reactFlowInstance || !nodeId) return;
+    
+    // Encontrar el nodo por ID
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    
+    // Animar el zoom al nodo
+    reactFlowInstance.fitView({
+      padding: 0.5,
+      duration: 300,
+      nodes: [node],
+      maxZoom: 1.5
+    });
+    
+    // Actualizar sólo el nodo específico con estilos especiales
+    setNodes(prevNodes => {
+      // Verificar si ya tiene el estilo para evitar actualizaciones innecesarias
+      const nodeToUpdate = prevNodes.find(n => n.id === nodeId);
+      if (nodeToUpdate?.style?.animation === 'pulse-highlight 1.5s ease-in-out') {
+        return prevNodes;
+      }
+      
+      return prevNodes.map(n => ({
+        ...n,
+        style: {
+          ...n.style,
+          // Pulso de animación para el nodo actual
+          animation: n.id === nodeId ? 'pulse-highlight 1.5s ease-in-out' : n.style?.animation || 'none',
+          boxShadow: n.id === nodeId 
+            ? '0 0 0 3px #fb923c, 0 0 15px rgba(251, 146, 60, 0.8)' 
+            : n.style?.boxShadow || 'none'
+        }
+      }));
+    });
+  }, [reactFlowInstance, nodes, setNodes]);
+
+  // Actualizar la función goToNextSearchResult para evitar actualizaciones repetidas
+  const goToNextSearchResult = useCallback(() => {
+    if (searchResults.length === 0) return;
+    
+    // Calcular el siguiente índice con rotación
+    const nextIndex = (currentResultIndex + 1) % searchResults.length;
+    setCurrentResultIndex(nextIndex);
+    
+    // Enfocar en el nodo correspondiente después de que se actualice el estado
+    setTimeout(() => {
+      focusOnNode(searchResults[nextIndex]?.id);
+    }, 0);
+  }, [searchResults, currentResultIndex, focusOnNode]);
+
+  // Actualizar la función goToPrevSearchResult
+  const goToPrevSearchResult = useCallback(() => {
+    if (searchResults.length === 0) return;
+    
+    // Calcular el índice anterior con rotación
+    const prevIndex = (currentResultIndex - 1 + searchResults.length) % searchResults.length;
+    setCurrentResultIndex(prevIndex);
+    
+    // Enfocar en el nodo correspondiente después de que se actualice el estado
+    setTimeout(() => {
+      focusOnNode(searchResults[prevIndex]?.id);
+    }, 0);
+  }, [searchResults, currentResultIndex, focusOnNode]);
+
+  // Actualizar clearSearch para asegurar que no cause bucles
+  const clearSearch = useCallback(() => {
+    setSearchTerm('');
+    setSearchResults([]);
+    setCurrentResultIndex(0);
+    setIsSearching(false);
+    
+    // Restaurar todos los nodos en una única actualización
+    setNodes(prevNodes => 
+      prevNodes.map(node => ({
+        ...node,
+        style: {
+          ...node.style,
+          opacity: 1,
+          filter: 'none',
+          boxShadow: 'none',
+          animation: 'none',
+          zIndex: 0
+        },
+        highlighted: false
+      }))
+    );
+  }, [setNodes]);
+
   return (
     <div className={`h-full w-full ${darkMode ? 'bg-black' : 'bg-gray-100'} relative`} ref={reactFlowWrapper}>
-      {/* Barra de búsqueda */}
-      <div className="absolute top-2 left-2 z-10">
-        <SearchBar onSearch={setSearchTerm} />
+      {/* Barra de búsqueda mejorada con controles de navegación */}
+      <div className="absolute top-2 left-2 z-10 flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <SearchBar onSearch={handleSearch} />
+          
+          {/* Controles de navegación de resultados */}
+          {isSearching && (
+            <div className="flex items-center bg-gray-800 rounded-md px-2 py-1 text-white">
+              <span className="text-xs mr-2">
+                {searchResults.length > 0 
+                  ? `${currentResultIndex + 1}/${searchResults.length}` 
+                  : '0 resultados'}
+              </span>
+              
+              <button 
+                onClick={goToPrevSearchResult}
+                disabled={searchResults.length === 0}
+                className="text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed p-1"
+                aria-label="Resultado anterior"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && goToPrevSearchResult()}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+              </button>
+              
+              <button 
+                onClick={goToNextSearchResult}
+                disabled={searchResults.length === 0}
+                className="text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed p-1"
+                aria-label="Siguiente resultado"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && goToNextSearchResult()}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+        
+        {/* Indicador de resultados y botón de limpiar */}
+        {searchResults.length > 0 && (
+          <div className="flex items-center gap-2 bg-gray-800 bg-opacity-70 rounded-md px-2 py-1 text-xs text-gray-300">
+            <div>
+              <span className="font-medium text-yellow-300">{searchResults.length}</span> 
+              {` coincidencia${searchResults.length !== 1 ? 's' : ''} encontrada${searchResults.length !== 1 ? 's' : ''}`}
+            </div>
+            <button 
+              onClick={clearSearch}
+              className="text-gray-400 hover:text-white ml-auto"
+              aria-label="Limpiar búsqueda"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && clearSearch()}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
       
       {/* Panel principal de controles - reorganizado para evitar superposiciones */}
@@ -1367,13 +1620,13 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
         onInit={setReactFlowInstance}
         fitView
         fitViewOptions={{ 
-          padding: 0.2, 
+          padding: 0.05, // Reducido para un zoom más cercano
           includeHiddenNodes: true,
           duration: 300,
-          maxZoom: 1.2
+          maxZoom: 1.8 // Aumentado para permitir más zoom
         }}
         minZoom={0.1}
-        maxZoom={2}
+        maxZoom={2.5} // Aumentado para permitir más zoom
         proOptions={{ 
           hideAttribution: true
         }}
