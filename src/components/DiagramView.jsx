@@ -1756,7 +1756,7 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
             duration: 150
           }}
           onFitView={handleFitView}
-          position="bottom-right"
+          position="bottom-left"
         />
         <MiniMap 
           nodeColor={(node) => {
