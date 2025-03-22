@@ -25,30 +25,30 @@ export default function useLayoutEngine(estimateNodeSize, nodeSizeMode) {
     let baseSep;
     switch (nodeSizeMode) {
       case 'compact':
-        baseSep = 30; // Compacto pero con espacio suficiente
+        baseSep = 40; // Aumentado de 30 a 40 para dar más espacio mínimo
         break;
       case 'expanded':
-        baseSep = 80; // Amplio espaciado
+        baseSep = 100; // Aumentado de 80 a 100 para más espacio
         break;
       case 'medium':
       default:
-        baseSep = 50; // Valor medio
+        baseSep = 70; // Aumentado de 50 a 70 para un valor medio más espacioso
         break;
     }
     
     // Factores de separación ajustados
-    let nodeSepFactor = 1.2; // Mayor separación horizontal
-    let rankSepFactor = 1.3; // Mayor separación vertical
+    let nodeSepFactor = 1.4; // Aumentado de 1.2 a 1.4 para mayor separación horizontal
+    let rankSepFactor = 1.5; // Aumentado de 1.3 a 1.5 para mayor separación vertical
     
     // Ajuste dinámico según cantidad de nodos
     if (safeNodes.length < 20) {
       // Más espacio para pocos nodos
-      nodeSepFactor = 1.5;
-      rankSepFactor = 1.6;
+      nodeSepFactor = 1.8; // Aumentado de 1.5 a 1.8
+      rankSepFactor = 2.0; // Aumentado de 1.6 a 2.0
     } else if (safeNodes.length > 100) {
       // Menos espacio (pero suficiente) para muchos nodos
-      nodeSepFactor = 0.9;
-      rankSepFactor = 1.0;
+      nodeSepFactor = 1.1; // Aumentado de 0.9 a 1.1
+      rankSepFactor = 1.2; // Aumentado de 1.0 a 1.2
     }
     
     // Calculamos separaciones finales

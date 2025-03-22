@@ -167,7 +167,7 @@ const initialJson = {
       "nutrients": {
         "calories": 52,
         "fiber": "2.4g",
-        "vitaminC": "4.6mg"
+        "vitaminC": "4.6753958475498975493847543987mg"
       }
     },
     {

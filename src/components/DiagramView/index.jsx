@@ -60,10 +60,55 @@ const DiagramView = ({ jsonData, darkMode = true }) => {
     edgesRef.current = edges;
   }, [edges]);
   
-  // Función para estimar tamaño de nodos
+  // Función auxiliar para estimar el tamaño de un nodo basado en su contenido
   const estimateNodeSize = useCallback((node) => {
-    // Tamaño fijo para todos los nodos
-    return { width: 180, height: 100 };
+    // Tamaño base para todos los nodos
+    let baseWidth = 180;
+    let baseHeight = 80;
+
+    // Si no hay datos, devolvemos tamaño base
+    if (!node.data) {
+      return { width: baseWidth, height: baseHeight };
+    }
+
+    // Calculamos espacio adicional según la cantidad de propiedades
+    const properties = node.data.properties || [];
+    const propertyCount = properties.length;
+    
+    // Encontrar la propiedad más larga para estimar el ancho
+    let maxPropertyLength = 0;
+    if (propertyCount > 0) {
+      properties.forEach(prop => {
+        // Suma de longitud de clave y valor + caracteres de separación
+        const propLength = (prop.key ? prop.key.length : 0) + 
+                          (prop.value ? String(prop.value).length : 0) + 5;
+        maxPropertyLength = Math.max(maxPropertyLength, propLength);
+      });
+    }
+    
+    // Ajustar el ancho si hay propiedades muy largas
+    // Limitamos a un máximo razonable para no crear nodos excesivamente anchos
+    if (maxPropertyLength > 30) {
+      baseWidth = Math.min(240, baseWidth + (maxPropertyLength - 30) * 4);
+    }
+    
+    // Calculamos la altura considerando:
+    // - 24px para el encabezado
+    // - 22px por cada propiedad
+    // - 8px de padding inferior
+    const heightWithProperties = 20 + (propertyCount * 10) + 8;
+    
+    // Altura mínima de 80px, y aumenta según la cantidad de propiedades
+    const height = Math.max(baseHeight, heightWithProperties);
+    
+    // Aplicamos un factor de crecimiento adicional si hay muchas propiedades
+    // para garantizar suficiente espacio entre nodos
+    const growthFactor = propertyCount > 5 ? 1.1 : 1.0;
+    
+    return { 
+      width: baseWidth, 
+      height: height * growthFactor 
+    };
   }, []);
 
   // Inicializar hooks personalizados
