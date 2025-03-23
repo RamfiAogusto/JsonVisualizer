@@ -25,7 +25,7 @@ JSON Visualizador es una herramienta moderna e interactiva para visualizar y edi
 
 1. Clona el repositorio:
 ```bash
-git clone https://github.com/tu-usuario/json-visualizador.git
+git clone https://github.com/RamfiAogusto/json-visualizador.git
 cd json-visualizador
 ```
 
@@ -81,18 +81,7 @@ Las contribuciones son bienvenidas. Para cambios importantes, por favor abre pri
 4. Haz push a la rama (`git push origin feature/amazing-feature`)
 5. Abre un Pull Request
 
-## 📝 Licencia
 
-Este proyecto está licenciado bajo la Licencia MIT - consulta el archivo `LICENSE` para más detalles.
-
-## 📧 Contacto
-
-Si tienes preguntas o sugerencias, no dudes en contactarnos:
-
-
-- **Correo electrónico**: [tu-correo@ejemplo.com](mailto:tu-correo@ejemplo.com)
-- **Twitter**: [@tu-usuario](https://twitter.com/tu-usuario)
-- **GitHub**: [tu-usuario](https://github.com/tu-usuario)
 
 ---
 
